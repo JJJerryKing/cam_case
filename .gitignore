@@ -1,0 +1,27 @@
+# Visual Studio user state and caches
+.vs/
+*.suo
+*.user
+*.userprefs
+*.~u
+*.bak
+
+# TwinCAT generated and deployment artifacts
+**/_Boot/
+**/_CompileInfo/
+**/_Libraries/
+*.compileinfo
+*.compiled-library
+*.tmc
+*.TcTTO
+*.tpzip
+*.tszip
+*.tizip
+*.app
+
+# Local trial licences
+*.tclrs
+
+# Windows metadata
+Thumbs.db
+Desktop.ini
