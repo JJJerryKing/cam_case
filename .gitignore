@@ -1,5 +1,6 @@
 # Visual Studio user state and caches
 .vs/
+.worktrees/
 *.suo
 *.user
 *.userprefs
