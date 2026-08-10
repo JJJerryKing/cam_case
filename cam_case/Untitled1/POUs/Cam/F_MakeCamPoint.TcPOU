@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="F_MakeCamPoint" Id="{472e9f73-a755-4f30-85b8-f7b4fb28af4c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_MakeCamPoint : MC_MotionFunctionPoint
+VAR_INPUT
+    udiPointIndex : UDINT;
+    eFunctionType : MC_MotionFunctionType;
+    ePointType : MC_MotionPointType;
+    udiRelIndexNextPoint : UDINT;
+    lrMasterPos : LREAL;
+    lrSlavePos : LREAL;
+    lrSlaveVelo : LREAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_MakeCamPoint.PointIndex := udiPointIndex;
+F_MakeCamPoint.FunctionType := eFunctionType;
+F_MakeCamPoint.PointType := ePointType;
+F_MakeCamPoint.RelIndexNextPoint := udiRelIndexNextPoint;
+F_MakeCamPoint.MasterPos := lrMasterPos;
+F_MakeCamPoint.SlavePos := lrSlavePos;
+F_MakeCamPoint.SlaveVelo := lrSlaveVelo;
+F_MakeCamPoint.SlaveAcc := 0.0;
+F_MakeCamPoint.SlaveJerk := 0.0;
+]]></ST>
+    </Implementation>
+    <LineIds Name="F_MakeCamPoint">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="7" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

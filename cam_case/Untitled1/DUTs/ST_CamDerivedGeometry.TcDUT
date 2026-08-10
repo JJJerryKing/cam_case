@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="ST_CamDerivedGeometry" Id="{0b5bcc6b-58d3-4058-921a-863817fcc16f}">
+    <Declaration><![CDATA[TYPE ST_CamDerivedGeometry :
+STRUCT
+    lrCutMasterDistance : LREAL;
+    lrFirstSlope : LREAL;
+    lrSecondSlope : LREAL;
+    lrFirstEdgeEnd : LREAL;
+    lrExitBlendEnd : LREAL;
+    lrEntryBlendStart : LREAL;
+    lrSecondEdgeEnd : LREAL;
+    lrClearanceRelative : LREAL;
+    lrFirstStartY : LREAL;
+    lrFirstEndY : LREAL;
+    lrExitEndY : LREAL;
+    lrEntryStartY : LREAL;
+    lrSecondStartY : LREAL;
+    lrSecondEndY : LREAL;
+    lrMasterStopDistance : LREAL;
+    lrStopWindowMargin : LREAL;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

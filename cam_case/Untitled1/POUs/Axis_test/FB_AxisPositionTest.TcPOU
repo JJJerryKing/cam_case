@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_AxisPositionTest" Id="{e6848e0b-9f45-4ba5-80f6-d2146d6081cd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_AxisPositionTest
+VAR_INPUT
+    bPower : BOOL;
+    bMoveAbsolute : BOOL;
+	bReset: BOOL;
+    bStop : BOOL;
+    lrTargetPosition : LREAL;
+    lrVelocity : LREAL;
+    lrAcceleration : LREAL;
+    lrDeceleration : LREAL;
+    lrJerk : LREAL;
+END_VAR
+VAR_IN_OUT
+    Axis : AXIS_REF;
+END_VAR
+VAR_OUTPUT
+    bPowerStatus : BOOL;
+    bMoveBusy : BOOL;
+    bMoveDone : BOOL;
+    bStopDone : BOOL;
+    bError : BOOL;
+    udiErrorID : UDINT;
+    lrActualPosition : LREAL;
+END_VAR
+VAR
+    fbPower : MC_Power;
+	fbReset : MC_Reset;
+    fbMoveAbsolute : MC_MoveAbsolute;
+    fbStop : MC_Stop;
+    stPowerOptions : ST_PowerOptions;
+    stMoveOptions : ST_MoveOptions;
+    stStopOptions : ST_MoveOptions;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Axis.ReadStatus();
+
+fbPower(
+    Enable := bPower,
+    Enable_Positive := TRUE,
+    Enable_Negative := TRUE,
+    Override := 100.0,
+    BufferMode := MC_Aborting,
+    Options := stPowerOptions,
+    Axis := Axis);
+
+fbMoveAbsolute(
+    Execute := bMoveAbsolute AND NOT bStop,
+    Position := lrTargetPosition,
+    Velocity := lrVelocity,
+    Acceleration := lrAcceleration,
+    Deceleration := lrDeceleration,
+    Jerk := lrJerk,
+    BufferMode := MC_Aborting,
+    Options := stMoveOptions,
+    Axis := Axis);
+
+fbReset(Axis := Axis,Execute := bReset);
+
+fbStop(
+    Execute := bStop,
+    Deceleration := lrDeceleration,
+    Jerk := lrJerk,
+    Options := stStopOptions,
+    Axis := Axis);
+
+bPowerStatus := fbPower.Status;
+bMoveBusy := fbMoveAbsolute.Busy;
+bMoveDone := fbMoveAbsolute.Done;
+bStopDone := fbStop.Done;
+bError := fbPower.Error OR fbMoveAbsolute.Error OR fbStop.Error;
+IF fbPower.Error THEN
+    udiErrorID := fbPower.ErrorID;
+ELSIF fbMoveAbsolute.Error THEN
+    udiErrorID := fbMoveAbsolute.ErrorID;
+ELSIF fbStop.Error THEN
+    udiErrorID := fbStop.ErrorID;
+ELSE
+    udiErrorID := 0;
+END_IF;
+lrActualPosition := Axis.NcToPlc.ActPos;
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_AxisPositionTest">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="19" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="25" Count="21" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

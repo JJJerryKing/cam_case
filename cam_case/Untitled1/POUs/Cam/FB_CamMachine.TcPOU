@@ -1,0 +1,863 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_CamMachine" Id="{b905fe73-4b9d-4a55-99cc-4135a4deb046}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CamMachine
+VAR_INPUT
+    stCommands : ST_CamCommands;
+    stRecipe : ST_CamRecipe;
+END_VAR
+VAR_IN_OUT
+    AxisConveyor : AXIS_REF;
+    AxisCutter : AXIS_REF;
+END_VAR
+VAR_OUTPUT
+    stStatus : ST_CamStatus;
+    stScope : ST_CamScope;
+END_VAR
+VAR CONSTANT
+    c_nCamTableIdA : MC_CAM_ID := 1;
+    c_nCamTableIdB : MC_CAM_ID := 2;
+    // Commissioned application limits; NC/drive limits must be no lower.
+    c_lrMachineMaxSlaveVelocity : LREAL := 600.0;
+    c_lrMachineMaxSlaveAcceleration : LREAL := 1600.0;
+    c_lrMachineMaxSlaveJerk : LREAL := 12000.0;
+    // Conservative controlled stop used only after a runtime fault.
+    c_lrFaultStopDeceleration : LREAL := 15.0;
+    c_lrFaultStopJerk : LREAL := 50.0;
+END_VAR
+VAR
+    eState : E_CamMachineState := CAM_STATE_DISABLED;
+    eProcessPhase : E_CamProcessPhase := CAM_PHASE_DISABLED;
+
+    rtReference : R_TRIG;
+    rtApplyRecipe : R_TRIG;
+    rtStart : R_TRIG;
+    rtStop : R_TRIG;
+    rtReset : R_TRIG;
+
+    fbPowerConveyor : MC_Power;
+    fbPowerCutter : MC_Power;
+    fbSetPositionConveyor : MC_SetPosition;
+    fbSetPositionCutter : MC_SetPosition;
+    fbResetConveyor : MC_Reset;
+    fbResetCutter : MC_Reset;
+    fbMoveConveyor : MC_MoveVelocity;
+    fbStopConveyor : MC_Stop;
+    fbReturnCutter : MC_MoveAbsolute;
+
+    fbRecipeValidator : FB_CamRecipeValidator;
+    fbProfileBuilder : FB_CamProfileBuilder;
+    fbElectronicCam : FB_ElectronicCam;
+
+    stPowerOptions : ST_PowerOptions;
+    stSetPositionConveyorOptions : ST_SetPositionOptions;
+    stSetPositionCutterOptions : ST_SetPositionOptions;
+    stMoveConveyorOptions : ST_MoveOptions;
+    stStopConveyorOptions : ST_MoveOptions;
+    stReturnCutterOptions : ST_MoveOptions;
+
+    stPendingRecipe : ST_CamRecipe;
+    stActiveRecipe : ST_CamRecipe;
+    stDerived : ST_CamDerivedGeometry;
+    stCamRef : MC_CAM_REF;
+
+    bPowerRequest : BOOL;
+    bReferenced : BOOL;
+    bRecipeLoaded : BOOL;
+    bStopRequested : BOOL;
+    bResetInProgress : BOOL;
+    bFaultStop : BOOL;
+    bForcePowerOff : BOOL;
+    usiBuildState : USINT;
+
+    nActiveCamTableId : MC_CAM_ID := 1;
+    nCandidateCamTableId : MC_CAM_ID := 2;
+    nCamCommandTableId : MC_CAM_ID := 1;
+
+    bSetPositionConveyorExecute : BOOL;
+    bSetPositionCutterExecute : BOOL;
+    bResetConveyorExecute : BOOL;
+    bResetCutterExecute : BOOL;
+    bMoveConveyorExecute : BOOL;
+    bStopConveyorExecute : BOOL;
+    bReturnCutterExecute : BOOL;
+
+    bValidateRecipePulse : BOOL;
+    bBuildProfilePulse : BOOL;
+    bLoadCamPulse : BOOL;
+    bCoupleCamPulse : BOOL;
+    bDecoupleCamPulse : BOOL;
+    bResetCamPulse : BOOL;
+
+    lrMasterCycleOrigin : LREAL;
+    lrMasterPhase : LREAL;
+    lrSlaveCycleOrigin : LREAL;
+    lrSlaveCamPosition : LREAL;
+    lrStopCommandDeceleration : LREAL;
+    lrStopCommandJerk : LREAL;
+    lrMaxCamSlope : LREAL;
+    lrMaxCamSecondDerivative : LREAL;
+    lrCalculatedMaxSlaveVelocity : LREAL;
+    lrCalculatedMaxSlaveAcceleration : LREAL;
+    lrCalculatedMaxSlaveJerk : LREAL;
+    lrCalculatedFaultStopSlaveAcceleration : LREAL;
+    lrCalculatedFaultStopSlaveJerk : LREAL;
+
+    bFaultLatched : BOOL;
+    eLatchedApplicationError : E_CamApplicationError;
+    eLatchedErrorSource : E_CamErrorSource;
+    udiLatchedMotionErrorID : UDINT;
+    bRequestFault : BOOL;
+    eRequestedApplicationError : E_CamApplicationError;
+    eRequestedErrorSource : E_CamErrorSource;
+    udiRequestedMotionErrorID : UDINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Refresh both axis status structures once at the start of the PLC scan.
+AxisConveyor.ReadStatus();
+AxisCutter.ReadStatus();
+
+rtReference(CLK := stCommands.bReference);
+rtApplyRecipe(CLK := stCommands.bApplyRecipe);
+rtStart(CLK := stCommands.bStart);
+rtStop(CLK := stCommands.bStop);
+rtReset(CLK := stCommands.bReset);
+
+// One-scan requests consumed by the lower layers at the end of this call.
+bValidateRecipePulse := FALSE;
+bBuildProfilePulse := FALSE;
+bLoadCamPulse := FALSE;
+bCoupleCamPulse := FALSE;
+bDecoupleCamPulse := FALSE;
+bResetCamPulse := FALSE;
+
+bRequestFault := FALSE;
+eRequestedApplicationError := CAM_ERROR_NONE;
+eRequestedErrorSource := CAM_SOURCE_NONE;
+udiRequestedMotionErrorID := 0;
+
+IF stActiveRecipe.lrObjectPitch > 0.0 THEN
+    lrMasterPhase := MODABS(
+        AxisConveyor.NcToPlc.SetPos - lrMasterCycleOrigin,
+        stActiveRecipe.lrObjectPitch);
+ELSE
+    lrMasterPhase := 0.0;
+END_IF;
+
+CASE eState OF
+    CAM_STATE_DISABLED:
+        bSetPositionConveyorExecute := FALSE;
+        bSetPositionCutterExecute := FALSE;
+        bResetConveyorExecute := FALSE;
+        bResetCutterExecute := FALSE;
+        bMoveConveyorExecute := FALSE;
+        bStopConveyorExecute := FALSE;
+        bReturnCutterExecute := FALSE;
+        bStopRequested := FALSE;
+        IF stCommands.bEnable THEN
+            eState := CAM_STATE_POWERING;
+        END_IF;
+
+    CAM_STATE_POWERING:
+        IF NOT stCommands.bEnable THEN
+            eState := CAM_STATE_DISABLED;
+        ELSIF fbPowerConveyor.Status AND fbPowerCutter.Status THEN
+            IF bReferenced AND bRecipeLoaded THEN
+                eState := CAM_STATE_READY;
+            ELSE
+                eState := CAM_STATE_IDLE;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_IDLE:
+        IF NOT stCommands.bEnable THEN
+            eState := CAM_STATE_DISABLED;
+        ELSIF rtReference.Q THEN
+            IF AxisConveyor.Status.NotMoving AND AxisCutter.Status.NotMoving THEN
+                bReferenced := FALSE;
+                bRecipeLoaded := FALSE;
+                bSetPositionConveyorExecute := TRUE;
+                eState := CAM_STATE_REFERENCING_MASTER;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+            END_IF;
+        ELSIF rtApplyRecipe.Q THEN
+            IF NOT bReferenced THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_NOT_REFERENCED;
+                eRequestedErrorSource := CAM_SOURCE_RECIPE;
+            ELSIF AxisConveyor.Status.NotMoving
+               AND AxisCutter.Status.NotMoving
+               AND NOT fbElectronicCam.bCamActive THEN
+                stPendingRecipe := stRecipe;
+                IF nActiveCamTableId = c_nCamTableIdA THEN
+                    nCandidateCamTableId := c_nCamTableIdB;
+                ELSE
+                    nCandidateCamTableId := c_nCamTableIdA;
+                END_IF;
+                nCamCommandTableId := nCandidateCamTableId;
+                bRecipeLoaded := FALSE;
+                usiBuildState := 0;
+                eState := CAM_STATE_BUILDING_TABLE;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+            END_IF;
+        ELSIF rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+
+    CAM_STATE_REFERENCING_MASTER:
+        IF fbSetPositionConveyor.Done THEN
+            bSetPositionConveyorExecute := FALSE;
+            bSetPositionCutterExecute := TRUE;
+            eState := CAM_STATE_REFERENCING_SLAVE;
+        END_IF;
+
+    CAM_STATE_REFERENCING_SLAVE:
+        IF fbSetPositionCutter.Done THEN
+            bSetPositionCutterExecute := FALSE;
+            bReferenced := TRUE;
+            eState := CAM_STATE_IDLE;
+        END_IF;
+
+    CAM_STATE_BUILDING_TABLE:
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+
+        CASE usiBuildState OF
+            0:
+                bValidateRecipePulse := TRUE;
+                usiBuildState := 10;
+
+            10:
+                IF fbRecipeValidator.bDone THEN
+                    IF fbRecipeValidator.bValid THEN
+                        stDerived := fbRecipeValidator.stDerived;
+                        bBuildProfilePulse := TRUE;
+                        usiBuildState := 20;
+                    ELSE
+                        bRequestFault := TRUE;
+                        eRequestedApplicationError := fbRecipeValidator.eError;
+                        eRequestedErrorSource := CAM_SOURCE_RECIPE;
+                    END_IF;
+                END_IF;
+
+            20:
+                IF fbProfileBuilder.bDone THEN
+                    stCamRef := fbProfileBuilder.stCamRef;
+                    bLoadCamPulse := TRUE;
+                    usiBuildState := 0;
+                    eState := CAM_STATE_LOADING_TABLE;
+                END_IF;
+        END_CASE;
+
+    CAM_STATE_LOADING_TABLE:
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        ELSIF fbElectronicCam.bLoadDone THEN
+            lrCalculatedMaxSlaveVelocity := MAX(
+                ABS(fbElectronicCam.stCharacteristics.fSlaveVeloMin),
+                ABS(fbElectronicCam.stCharacteristics.fSlaveVeloMax))
+                * stPendingRecipe.lrConveyorVelocity;
+            lrCalculatedMaxSlaveAcceleration := MAX(
+                ABS(fbElectronicCam.stCharacteristics.fSlaveAccMin),
+                ABS(fbElectronicCam.stCharacteristics.fSlaveAccMax))
+                * stPendingRecipe.lrConveyorVelocity
+                * stPendingRecipe.lrConveyorVelocity;
+            lrCalculatedMaxSlaveJerk := MAX(
+                ABS(fbElectronicCam.stCharacteristics.fSlaveJerkMin),
+                ABS(fbElectronicCam.stCharacteristics.fSlaveJerkMax))
+                * stPendingRecipe.lrConveyorVelocity
+                * stPendingRecipe.lrConveyorVelocity
+                * stPendingRecipe.lrConveyorVelocity;
+            lrMaxCamSlope := MAX(
+                ABS(fbElectronicCam.stCharacteristics.fSlaveVeloMin),
+                ABS(fbElectronicCam.stCharacteristics.fSlaveVeloMax));
+            lrMaxCamSecondDerivative := MAX(
+                ABS(fbElectronicCam.stCharacteristics.fSlaveAccMin),
+                ABS(fbElectronicCam.stCharacteristics.fSlaveAccMax));
+            lrCalculatedFaultStopSlaveAcceleration :=
+                lrCalculatedMaxSlaveAcceleration
+                + lrMaxCamSlope * c_lrFaultStopDeceleration;
+            lrCalculatedFaultStopSlaveJerk :=
+                lrCalculatedMaxSlaveJerk
+                + 3.0 * lrMaxCamSecondDerivative
+                  * stPendingRecipe.lrConveyorVelocity
+                  * c_lrFaultStopDeceleration
+                + lrMaxCamSlope * c_lrFaultStopJerk;
+
+            IF (lrCalculatedMaxSlaveVelocity > stPendingRecipe.lrMaxSlaveVelocity)
+               OR (lrCalculatedMaxSlaveAcceleration
+                    > stPendingRecipe.lrMaxSlaveAcceleration)
+               OR (lrCalculatedMaxSlaveJerk > stPendingRecipe.lrMaxSlaveJerk)
+               OR (lrCalculatedFaultStopSlaveAcceleration
+                    > stPendingRecipe.lrMaxSlaveAcceleration)
+               OR (lrCalculatedFaultStopSlaveJerk
+                    > stPendingRecipe.lrMaxSlaveJerk)
+               OR (lrCalculatedMaxSlaveVelocity
+                    > c_lrMachineMaxSlaveVelocity)
+               OR (lrCalculatedMaxSlaveAcceleration
+                    > c_lrMachineMaxSlaveAcceleration)
+               OR (lrCalculatedMaxSlaveJerk > c_lrMachineMaxSlaveJerk)
+               OR (lrCalculatedFaultStopSlaveAcceleration
+                    > c_lrMachineMaxSlaveAcceleration)
+               OR (lrCalculatedFaultStopSlaveJerk
+                    > c_lrMachineMaxSlaveJerk) THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_RECIPE_DYNAMICS;
+                eRequestedErrorSource := CAM_SOURCE_TABLE_CHARACTERISTICS;
+            ELSE
+                stActiveRecipe := stPendingRecipe;
+                nActiveCamTableId := nCandidateCamTableId;
+                nCamCommandTableId := nActiveCamTableId;
+                bRecipeLoaded := TRUE;
+                IF stCommands.bEnable THEN
+                    eState := CAM_STATE_READY;
+                ELSE
+                    eState := CAM_STATE_DISABLED;
+                END_IF;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_READY:
+        bStopRequested := FALSE;
+        bFaultStop := FALSE;
+        IF NOT stCommands.bEnable THEN
+            eState := CAM_STATE_DISABLED;
+        ELSIF rtReference.Q THEN
+            IF AxisConveyor.Status.NotMoving AND AxisCutter.Status.NotMoving THEN
+                bReferenced := FALSE;
+                bRecipeLoaded := FALSE;
+                bSetPositionConveyorExecute := TRUE;
+                eState := CAM_STATE_REFERENCING_MASTER;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+            END_IF;
+        ELSIF rtApplyRecipe.Q THEN
+            IF NOT bReferenced THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_NOT_REFERENCED;
+                eRequestedErrorSource := CAM_SOURCE_RECIPE;
+            ELSIF AxisConveyor.Status.NotMoving
+               AND AxisCutter.Status.NotMoving
+               AND NOT fbElectronicCam.bCamActive THEN
+                stPendingRecipe := stRecipe;
+                IF nActiveCamTableId = c_nCamTableIdA THEN
+                    nCandidateCamTableId := c_nCamTableIdB;
+                ELSE
+                    nCandidateCamTableId := c_nCamTableIdA;
+                END_IF;
+                nCamCommandTableId := nCandidateCamTableId;
+                bRecipeLoaded := FALSE;
+                usiBuildState := 0;
+                eState := CAM_STATE_BUILDING_TABLE;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+            END_IF;
+        ELSIF rtStart.Q THEN
+            IF bReferenced
+               AND bRecipeLoaded
+               AND AxisConveyor.Status.NotMoving
+               AND AxisCutter.Status.NotMoving
+               AND NOT fbElectronicCam.bCamActive
+               AND (ABS(AxisCutter.NcToPlc.SetPos)
+                    <= stActiveRecipe.lrPositionTolerance) THEN
+                bStopRequested := FALSE;
+                bFaultStop := FALSE;
+                bMoveConveyorExecute := TRUE;
+                eState := CAM_STATE_STARTING_MASTER;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_STARTING_MASTER:
+        IF rtStop.Q OR NOT stCommands.bEnable THEN
+            bMoveConveyorExecute := FALSE;
+            bFaultStop := FALSE;
+            bStopConveyorExecute := TRUE;
+            eState := CAM_STATE_STOPPING_MASTER;
+        ELSIF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        ELSIF fbMoveConveyor.InVelocity THEN
+            // Cam coupling starts only after the conveyor is at constant speed.
+            bMoveConveyorExecute := FALSE;
+            lrMasterCycleOrigin := AxisConveyor.NcToPlc.SetPos;
+            lrSlaveCycleOrigin := AxisCutter.NcToPlc.SetPos;
+            nCamCommandTableId := nActiveCamTableId;
+            bCoupleCamPulse := TRUE;
+            eState := CAM_STATE_CAMMING_IN;
+        END_IF;
+
+    CAM_STATE_CAMMING_IN:
+        IF rtStop.Q OR NOT stCommands.bEnable THEN
+            bStopRequested := TRUE;
+        END_IF;
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bStopRequested := TRUE;
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+        IF fbElectronicCam.bError THEN
+            IF NOT bFaultLatched THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := fbElectronicCam.eApplicationError;
+                eRequestedErrorSource := fbElectronicCam.eErrorSource;
+                udiRequestedMotionErrorID := fbElectronicCam.udiErrorID;
+            END_IF;
+        ELSIF fbElectronicCam.bCoupleDone THEN
+            IF bStopRequested OR bFaultLatched OR bRequestFault THEN
+                bFaultStop := bFaultLatched OR bRequestFault;
+                eState := CAM_STATE_STOPPING_MASTER;
+            ELSE
+                eState := CAM_STATE_RUNNING;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_RUNNING:
+        IF rtStop.Q OR NOT stCommands.bEnable THEN
+            bStopRequested := TRUE;
+            bFaultStop := FALSE;
+            eState := CAM_STATE_STOPPING_MASTER;
+        ELSIF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+
+    CAM_STATE_STOPPING_MASTER:
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+
+        // A normal stop waits for the zero-slope 480..500 mm dwell. A fault
+        // stop uses the separately validated conservative dynamics immediately.
+        IF NOT bStopConveyorExecute THEN
+            IF bFaultStop OR NOT fbElectronicCam.bCamActive THEN
+                bStopConveyorExecute := TRUE;
+            ELSIF (lrMasterPhase >= stActiveRecipe.lrReturnEndPhase)
+               AND (lrMasterPhase <=
+                    (stActiveRecipe.lrObjectPitch
+                     - stDerived.lrMasterStopDistance
+                     - stDerived.lrStopWindowMargin)) THEN
+                bStopConveyorExecute := TRUE;
+            END_IF;
+        END_IF;
+
+        IF fbStopConveyor.Error THEN
+            bStopConveyorExecute := FALSE;
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_MASTER_STOP;
+            eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+            udiRequestedMotionErrorID := fbStopConveyor.ErrorID;
+            bForcePowerOff := TRUE;
+            eState := CAM_STATE_FAULT;
+        ELSIF fbStopConveyor.Done THEN
+            bStopConveyorExecute := FALSE;
+            eState := CAM_STATE_RELEASING_STOP;
+        END_IF;
+
+    CAM_STATE_RELEASING_STOP:
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+        IF NOT fbStopConveyor.Busy THEN
+            IF fbElectronicCam.bCamActive THEN
+                bDecoupleCamPulse := TRUE;
+                eState := CAM_STATE_CAMMING_OUT;
+            ELSE
+                bReturnCutterExecute := TRUE;
+                eState := CAM_STATE_RETURNING_SLAVE;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_CAMMING_OUT:
+        IF rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+        IF fbElectronicCam.bError THEN
+            IF NOT bFaultLatched THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := fbElectronicCam.eApplicationError;
+                eRequestedErrorSource := fbElectronicCam.eErrorSource;
+                udiRequestedMotionErrorID := fbElectronicCam.udiErrorID;
+            END_IF;
+            eState := CAM_STATE_FAULT;
+        ELSIF fbElectronicCam.bDecoupleDone THEN
+            bReturnCutterExecute := TRUE;
+            eState := CAM_STATE_RETURNING_SLAVE;
+        END_IF;
+
+    CAM_STATE_RETURNING_SLAVE:
+        IF NOT bResetInProgress
+           AND (rtReference.Q OR rtApplyRecipe.Q OR rtStart.Q) THEN
+            bRequestFault := TRUE;
+            eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
+        END_IF;
+        IF fbReturnCutter.Error OR fbReturnCutter.CommandAborted THEN
+            bReturnCutterExecute := FALSE;
+            IF NOT bFaultLatched THEN
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_SLAVE_RETURN;
+                eRequestedErrorSource := CAM_SOURCE_SLAVE_AXIS;
+                udiRequestedMotionErrorID := fbReturnCutter.ErrorID;
+            END_IF;
+            eState := CAM_STATE_FAULT;
+        ELSIF fbReturnCutter.Done
+           AND (ABS(AxisCutter.NcToPlc.SetPos)
+                <= stActiveRecipe.lrPositionTolerance) THEN
+            bReturnCutterExecute := FALSE;
+            bStopRequested := FALSE;
+            IF bResetInProgress THEN
+                bResetInProgress := FALSE;
+                bFaultStop := FALSE;
+                bForcePowerOff := FALSE;
+                bFaultLatched := FALSE;
+                eLatchedApplicationError := CAM_ERROR_NONE;
+                eLatchedErrorSource := CAM_SOURCE_NONE;
+                udiLatchedMotionErrorID := 0;
+                bRecipeLoaded := FALSE;
+                IF stCommands.bEnable THEN
+                    eState := CAM_STATE_POWERING;
+                ELSE
+                    eState := CAM_STATE_DISABLED;
+                END_IF;
+            ELSIF bFaultLatched THEN
+                eState := CAM_STATE_FAULT;
+            ELSIF stCommands.bEnable THEN
+                eState := CAM_STATE_READY;
+            ELSE
+                eState := CAM_STATE_DISABLED;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_RESETTING:
+        IF fbResetConveyor.Error OR fbResetCutter.Error THEN
+            bResetConveyorExecute := FALSE;
+            bResetCutterExecute := FALSE;
+            bResetInProgress := FALSE;
+            eState := CAM_STATE_FAULT;
+        ELSIF fbResetConveyor.Done AND fbResetCutter.Done THEN
+            bResetConveyorExecute := FALSE;
+            bResetCutterExecute := FALSE;
+            IF fbElectronicCam.bCamActive THEN
+                bDecoupleCamPulse := TRUE;
+                eState := CAM_STATE_CAMMING_OUT;
+            ELSE
+                bReturnCutterExecute := TRUE;
+                eState := CAM_STATE_RETURNING_SLAVE;
+            END_IF;
+        END_IF;
+
+    CAM_STATE_FAULT:
+        bSetPositionConveyorExecute := FALSE;
+        bSetPositionCutterExecute := FALSE;
+        bMoveConveyorExecute := FALSE;
+        bStopConveyorExecute := FALSE;
+        bReturnCutterExecute := FALSE;
+        IF rtReset.Q
+           AND AxisConveyor.Status.NotMoving
+           AND AxisCutter.Status.NotMoving THEN
+            bFaultStop := FALSE;
+            bForcePowerOff := FALSE;
+            bResetConveyorExecute := TRUE;
+            bResetCutterExecute := TRUE;
+            bResetCamPulse := TRUE;
+            bResetInProgress := TRUE;
+            eState := CAM_STATE_RESETTING;
+        END_IF;
+END_CASE;
+
+// Keep power while any controlled stop, decouple, return, or reset is active.
+// MC_Stop failure removes the non-safety motion enable as a last fallback.
+bPowerRequest := (stCommands.bEnable
+    OR (eState = CAM_STATE_REFERENCING_MASTER)
+    OR (eState = CAM_STATE_REFERENCING_SLAVE)
+    OR (eState = CAM_STATE_CAMMING_IN)
+    OR (eState = CAM_STATE_STARTING_MASTER)
+    OR (eState = CAM_STATE_RUNNING)
+    OR (eState = CAM_STATE_STOPPING_MASTER)
+    OR (eState = CAM_STATE_RELEASING_STOP)
+    OR (eState = CAM_STATE_CAMMING_OUT)
+    OR (eState = CAM_STATE_RETURNING_SLAVE)
+    OR (eState = CAM_STATE_RESETTING)
+    OR fbElectronicCam.bBusy
+    OR fbElectronicCam.bCamActive)
+    AND NOT bForcePowerOff;
+
+fbPowerConveyor(
+    Enable := bPowerRequest,
+    Enable_Positive := TRUE,
+    Enable_Negative := TRUE,
+    Override := 100.0,
+    BufferMode := MC_Aborting,
+    Options := stPowerOptions,
+    Axis := AxisConveyor);
+fbPowerCutter(
+    Enable := bPowerRequest,
+    Enable_Positive := TRUE,
+    Enable_Negative := TRUE,
+    Override := 100.0,
+    BufferMode := MC_Aborting,
+    Options := stPowerOptions,
+    Axis := AxisCutter);
+
+fbSetPositionConveyor(
+    Execute := bSetPositionConveyorExecute,
+    Position := 0.0,
+    Mode := FALSE,
+    Options := stSetPositionConveyorOptions,
+    Axis := AxisConveyor);
+fbSetPositionCutter(
+    Execute := bSetPositionCutterExecute,
+    Position := 0.0,
+    Mode := FALSE,
+    Options := stSetPositionCutterOptions,
+    Axis := AxisCutter);
+
+fbResetConveyor(
+    Execute := bResetConveyorExecute,
+    Axis := AxisConveyor);
+fbResetCutter(
+    Execute := bResetCutterExecute,
+    Axis := AxisCutter);
+
+fbMoveConveyor(
+    Execute := bMoveConveyorExecute,
+    Velocity := stActiveRecipe.lrConveyorVelocity,
+    Acceleration := stActiveRecipe.lrMasterAcceleration,
+    Deceleration := stActiveRecipe.lrMasterDeceleration,
+    Jerk := stActiveRecipe.lrMasterJerk,
+    Direction := MC_Positive_Direction,
+    BufferMode := MC_Aborting,
+    Options := stMoveConveyorOptions,
+    Axis := AxisConveyor);
+IF bFaultStop THEN
+    lrStopCommandDeceleration := c_lrFaultStopDeceleration;
+    lrStopCommandJerk := c_lrFaultStopJerk;
+ELSE
+    lrStopCommandDeceleration := stActiveRecipe.lrMasterDeceleration;
+    lrStopCommandJerk := stActiveRecipe.lrMasterJerk;
+END_IF;
+fbStopConveyor(
+    Execute := bStopConveyorExecute,
+    Deceleration := lrStopCommandDeceleration,
+    Jerk := lrStopCommandJerk,
+    Options := stStopConveyorOptions,
+    Axis := AxisConveyor);
+fbReturnCutter(
+    Execute := bReturnCutterExecute,
+    Position := 0.0,
+    Velocity := stActiveRecipe.lrRecoveryVelocity,
+    Acceleration := stActiveRecipe.lrRecoveryAcceleration,
+    Deceleration := stActiveRecipe.lrRecoveryDeceleration,
+    Jerk := stActiveRecipe.lrRecoveryJerk,
+    BufferMode := MC_Aborting,
+    Options := stReturnCutterOptions,
+    Axis := AxisCutter);
+
+fbRecipeValidator(
+    bExecute := bValidateRecipePulse,
+    stRecipe := stPendingRecipe);
+fbProfileBuilder(
+    bExecute := bBuildProfilePulse,
+    stRecipe := stPendingRecipe,
+    stDerived := stDerived);
+fbElectronicCam(
+    bLoad := bLoadCamPulse,
+    bCouple := bCoupleCamPulse,
+    bDecouple := bDecoupleCamPulse,
+    bReset := bResetCamPulse,
+    nCamTableId := nCamCommandTableId,
+    Master := AxisConveyor,
+    Slave := AxisCutter,
+    CamTable := stCamRef);
+
+// Convert lower-level errors into one deterministic first-fault request.
+IF NOT bRequestFault AND NOT bFaultLatched THEN
+    IF fbPowerConveyor.Error THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_AXIS_POWER;
+        eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+        udiRequestedMotionErrorID := fbPowerConveyor.ErrorID;
+    ELSIF fbPowerCutter.Error THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_AXIS_POWER;
+        eRequestedErrorSource := CAM_SOURCE_SLAVE_AXIS;
+        udiRequestedMotionErrorID := fbPowerCutter.ErrorID;
+    ELSIF fbSetPositionConveyor.Error THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_AXIS_REFERENCE;
+        eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+        udiRequestedMotionErrorID := fbSetPositionConveyor.ErrorID;
+    ELSIF fbSetPositionCutter.Error THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_AXIS_REFERENCE;
+        eRequestedErrorSource := CAM_SOURCE_SLAVE_AXIS;
+        udiRequestedMotionErrorID := fbSetPositionCutter.ErrorID;
+    ELSIF fbMoveConveyor.Error
+       OR (fbMoveConveyor.CommandAborted
+           AND ((eState = CAM_STATE_STARTING_MASTER)
+                OR (eState = CAM_STATE_CAMMING_IN)
+                OR (eState = CAM_STATE_RUNNING))) THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_MASTER_MOVE;
+        eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+        udiRequestedMotionErrorID := fbMoveConveyor.ErrorID;
+    ELSIF fbStopConveyor.Error THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_MASTER_STOP;
+        eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+        udiRequestedMotionErrorID := fbStopConveyor.ErrorID;
+    ELSIF fbReturnCutter.Error OR fbReturnCutter.CommandAborted THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := CAM_ERROR_SLAVE_RETURN;
+        eRequestedErrorSource := CAM_SOURCE_SLAVE_AXIS;
+        udiRequestedMotionErrorID := fbReturnCutter.ErrorID;
+    ELSIF fbElectronicCam.bError THEN
+        bRequestFault := TRUE;
+        eRequestedApplicationError := fbElectronicCam.eApplicationError;
+        eRequestedErrorSource := fbElectronicCam.eErrorSource;
+        udiRequestedMotionErrorID := fbElectronicCam.udiErrorID;
+    END_IF;
+END_IF;
+
+IF bRequestFault THEN
+    IF NOT bFaultLatched THEN
+        bFaultLatched := TRUE;
+        eLatchedApplicationError := eRequestedApplicationError;
+        eLatchedErrorSource := eRequestedErrorSource;
+        udiLatchedMotionErrorID := udiRequestedMotionErrorID;
+    END_IF;
+
+    CASE eState OF
+        CAM_STATE_STARTING_MASTER,
+        CAM_STATE_CAMMING_IN,
+        CAM_STATE_RUNNING:
+            // Any runtime fault is stopped before entering the latched fault state.
+            bMoveConveyorExecute := FALSE;
+            bStopRequested := TRUE;
+            bFaultStop := TRUE;
+            eState := CAM_STATE_STOPPING_MASTER;
+        CAM_STATE_STOPPING_MASTER:
+            bFaultStop := TRUE;
+        CAM_STATE_RELEASING_STOP,
+        CAM_STATE_CAMMING_OUT,
+        CAM_STATE_RETURNING_SLAVE,
+        CAM_STATE_RESETTING:
+            // Master is already stopped; finish the controlled recovery step.
+    ELSE
+        eState := CAM_STATE_FAULT;
+    END_CASE;
+END_IF;
+
+// Scope signals are kept flat and use the NC cyclic set/actual values directly.
+stScope.lrMasterSetPosition := AxisConveyor.NcToPlc.SetPos;
+stScope.lrMasterActualPosition := AxisConveyor.NcToPlc.ActPos;
+stScope.lrMasterSetVelocity := AxisConveyor.NcToPlc.SetVelo;
+stScope.lrMasterActualVelocity := AxisConveyor.NcToPlc.ActVelo;
+stScope.lrSlaveSetPosition := AxisCutter.NcToPlc.SetPos;
+stScope.lrSlaveActualPosition := AxisCutter.NcToPlc.ActPos;
+stScope.lrSlaveSetVelocity := AxisCutter.NcToPlc.SetVelo;
+stScope.lrSlaveActualVelocity := AxisCutter.NcToPlc.ActVelo;
+
+IF fbElectronicCam.bCamActive AND (stActiveRecipe.lrObjectPitch > 0.0) THEN
+    stScope.lrMasterPhase := lrMasterPhase;
+    lrSlaveCamPosition := AxisCutter.NcToPlc.SetPos - lrSlaveCycleOrigin;
+    stScope.lrObjectRelativePosition :=
+        lrSlaveCamPosition - stScope.lrMasterPhase;
+ELSE
+    stScope.lrMasterPhase := 0.0;
+    stScope.lrObjectRelativePosition := 0.0;
+END_IF;
+
+IF eState = CAM_STATE_DISABLED THEN
+    eProcessPhase := CAM_PHASE_DISABLED;
+ELSIF stScope.lrMasterPhase < stActiveRecipe.lrBlendMasterDistance THEN
+    eProcessPhase := CAM_PHASE_PREPARE;
+ELSIF stScope.lrMasterPhase < stActiveRecipe.lrFirstEdgeStart THEN
+    eProcessPhase := CAM_PHASE_APPROACH;
+ELSIF stScope.lrMasterPhase < stDerived.lrFirstEdgeEnd THEN
+    eProcessPhase := CAM_PHASE_FIRST_EDGE;
+ELSIF stScope.lrMasterPhase < stDerived.lrExitBlendEnd THEN
+    eProcessPhase := CAM_PHASE_EXIT_FIRST_EDGE;
+ELSIF stScope.lrMasterPhase < stDerived.lrEntryBlendStart THEN
+    eProcessPhase := CAM_PHASE_SYNCHRONOUS;
+ELSIF stScope.lrMasterPhase < stActiveRecipe.lrSecondEdgeStart THEN
+    eProcessPhase := CAM_PHASE_ENTER_SECOND_EDGE;
+ELSIF stScope.lrMasterPhase < stDerived.lrSecondEdgeEnd THEN
+    eProcessPhase := CAM_PHASE_SECOND_EDGE;
+ELSIF stScope.lrMasterPhase < stActiveRecipe.lrReturnEndPhase THEN
+    eProcessPhase := CAM_PHASE_RETURN;
+ELSE
+    eProcessPhase := CAM_PHASE_DWELL;
+END_IF;
+
+CASE eProcessPhase OF
+    CAM_PHASE_FIRST_EDGE:
+        stScope.lrExpectedSlaveVelocity :=
+            stActiveRecipe.lrConveyorVelocity + stActiveRecipe.lrCutVelocity;
+    CAM_PHASE_SYNCHRONOUS:
+        stScope.lrExpectedSlaveVelocity := stActiveRecipe.lrConveyorVelocity;
+    CAM_PHASE_SECOND_EDGE:
+        stScope.lrExpectedSlaveVelocity :=
+            stActiveRecipe.lrConveyorVelocity - stActiveRecipe.lrCutVelocity;
+    CAM_PHASE_APPROACH,
+    CAM_PHASE_EXIT_FIRST_EDGE,
+    CAM_PHASE_ENTER_SECOND_EDGE,
+    CAM_PHASE_RETURN:
+        stScope.lrExpectedSlaveVelocity := AxisCutter.NcToPlc.SetVelo;
+ELSE
+    stScope.lrExpectedSlaveVelocity := 0.0;
+END_CASE;
+
+stStatus.eState := eState;
+stStatus.eProcessPhase := eProcessPhase;
+stStatus.bPowerEnabled := fbPowerConveyor.Status AND fbPowerCutter.Status;
+stStatus.bReferenced := bReferenced;
+stStatus.bRecipeLoaded := bRecipeLoaded;
+stStatus.bCamActive := fbElectronicCam.bCamActive;
+stStatus.bRunning := eState = CAM_STATE_RUNNING;
+stStatus.bBusy := (eState <> CAM_STATE_DISABLED)
+    AND (eState <> CAM_STATE_IDLE)
+    AND (eState <> CAM_STATE_READY)
+    AND (eState <> CAM_STATE_FAULT);
+stStatus.eApplicationError := eLatchedApplicationError;
+stStatus.eErrorSource := eLatchedErrorSource;
+stStatus.udiMotionErrorID := udiLatchedMotionErrorID;
+stStatus.lrCalculatedMaxSlaveVelocity := lrCalculatedMaxSlaveVelocity;
+stStatus.lrCalculatedMaxSlaveAcceleration := lrCalculatedMaxSlaveAcceleration;
+stStatus.lrCalculatedMaxSlaveJerk := lrCalculatedMaxSlaveJerk;
+stStatus.lrCalculatedFaultStopSlaveAcceleration :=
+    lrCalculatedFaultStopSlaveAcceleration;
+stStatus.lrCalculatedFaultStopSlaveJerk :=
+    lrCalculatedFaultStopSlaveJerk;
+
+stScope.eMachineState := eState;
+stScope.eProcessPhase := eProcessPhase;
+stScope.bCamActive := fbElectronicCam.bCamActive;
+stScope.bRecipeLoaded := bRecipeLoaded;
+stScope.eApplicationError := eLatchedApplicationError;
+stScope.udiMotionErrorID := udiLatchedMotionErrorID;
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CamMachine">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="736" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_CamRecipeValidator" Id="{374ce54b-b7ae-41e3-9006-33947d575bed}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CamRecipeValidator
+VAR_INPUT
+    bExecute : BOOL;
+    stRecipe : ST_CamRecipe;
+END_VAR
+VAR_OUTPUT
+    bDone : BOOL;
+    bValid : BOOL;
+    bError : BOOL;
+    eError : E_CamApplicationError;
+    stDerived : ST_CamDerivedGeometry;
+END_VAR
+VAR
+    rtExecute : R_TRIG;
+END_VAR
+VAR CONSTANT
+    c_lrPlcCycleSeconds : LREAL := 0.01;
+    c_lrSaneUpperBound : LREAL := 1.0E9;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtExecute(CLK := bExecute);
+bDone := FALSE;
+
+IF rtExecute.Q THEN
+    bValid := FALSE;
+    bError := FALSE;
+    eError := CAM_ERROR_NONE;
+
+    // The paired comparisons also reject NaN and infinity-like values.
+    IF NOT ((stRecipe.lrObjectPitch > 0.0)
+       AND (stRecipe.lrObjectPitch < c_lrSaneUpperBound)) THEN
+        eError := CAM_ERROR_RECIPE_PITCH;
+    ELSIF NOT ((stRecipe.lrConveyorVelocity > 0.0)
+       AND (stRecipe.lrConveyorVelocity < c_lrSaneUpperBound)) THEN
+        eError := CAM_ERROR_RECIPE_CONVEYOR_VELOCITY;
+    ELSIF NOT ((stRecipe.lrCutVelocity > 0.0)
+       AND (stRecipe.lrCutVelocity < stRecipe.lrConveyorVelocity)) THEN
+        eError := CAM_ERROR_RECIPE_CUT_VELOCITY;
+    ELSIF NOT ((stRecipe.lrObjectEdgeLength > 0.0)
+       AND (stRecipe.lrObjectEdgeLength < c_lrSaneUpperBound)
+       AND (stRecipe.lrBlendMasterDistance > 0.0)
+       AND (stRecipe.lrBlendMasterDistance < c_lrSaneUpperBound)
+       AND (stRecipe.lrFirstEdgeStart > 0.0)
+       AND (stRecipe.lrFirstEdgeStart < c_lrSaneUpperBound)
+       AND (stRecipe.lrSecondEdgeStart > 0.0)
+       AND (stRecipe.lrSecondEdgeStart < c_lrSaneUpperBound)
+       AND (stRecipe.lrReturnEndPhase > 0.0)
+       AND (stRecipe.lrReturnEndPhase < c_lrSaneUpperBound)) THEN
+        eError := CAM_ERROR_RECIPE_EDGE_LENGTH;
+    ELSIF NOT ((stRecipe.lrMasterAcceleration > 0.0)
+       AND (stRecipe.lrMasterAcceleration < c_lrSaneUpperBound)
+       AND (stRecipe.lrMasterDeceleration > 0.0)
+       AND (stRecipe.lrMasterDeceleration < c_lrSaneUpperBound)
+       AND (stRecipe.lrMasterJerk > 0.0)
+       AND (stRecipe.lrMasterJerk < c_lrSaneUpperBound)
+       AND (stRecipe.lrRecoveryVelocity > 0.0)
+       AND (stRecipe.lrRecoveryVelocity < c_lrSaneUpperBound)
+       AND (stRecipe.lrRecoveryAcceleration > 0.0)
+       AND (stRecipe.lrRecoveryAcceleration < c_lrSaneUpperBound)
+       AND (stRecipe.lrRecoveryDeceleration > 0.0)
+       AND (stRecipe.lrRecoveryDeceleration < c_lrSaneUpperBound)
+       AND (stRecipe.lrRecoveryJerk > 0.0)
+       AND (stRecipe.lrRecoveryJerk < c_lrSaneUpperBound)
+       AND (stRecipe.lrPositionTolerance > 0.0)
+       AND (stRecipe.lrPositionTolerance < c_lrSaneUpperBound)
+       AND (stRecipe.lrMaxSlaveVelocity > 0.0)
+       AND (stRecipe.lrMaxSlaveVelocity < c_lrSaneUpperBound)
+       AND (stRecipe.lrMaxSlaveAcceleration > 0.0)
+       AND (stRecipe.lrMaxSlaveAcceleration < c_lrSaneUpperBound)
+       AND (stRecipe.lrMaxSlaveJerk > 0.0)
+       AND (stRecipe.lrMaxSlaveJerk < c_lrSaneUpperBound)) THEN
+        eError := CAM_ERROR_RECIPE_DYNAMICS;
+    ELSE
+        stDerived.lrCutMasterDistance :=
+            stRecipe.lrObjectEdgeLength * stRecipe.lrConveyorVelocity
+            / stRecipe.lrCutVelocity;
+        stDerived.lrFirstSlope :=
+            1.0 + stRecipe.lrCutVelocity / stRecipe.lrConveyorVelocity;
+        stDerived.lrSecondSlope :=
+            1.0 - stRecipe.lrCutVelocity / stRecipe.lrConveyorVelocity;
+        stDerived.lrFirstEdgeEnd :=
+            stRecipe.lrFirstEdgeStart + stDerived.lrCutMasterDistance;
+        stDerived.lrExitBlendEnd :=
+            stDerived.lrFirstEdgeEnd + stRecipe.lrBlendMasterDistance;
+        stDerived.lrEntryBlendStart :=
+            stRecipe.lrSecondEdgeStart - stRecipe.lrBlendMasterDistance;
+        stDerived.lrSecondEdgeEnd :=
+            stRecipe.lrSecondEdgeStart + stDerived.lrCutMasterDistance;
+        stDerived.lrFirstStartY := stRecipe.lrFirstEdgeStart;
+        stDerived.lrFirstEndY := stDerived.lrFirstStartY
+            + stDerived.lrFirstSlope * stDerived.lrCutMasterDistance;
+        stDerived.lrExitEndY := stDerived.lrFirstEndY
+            + 0.5 * (stDerived.lrFirstSlope + 1.0)
+            * stRecipe.lrBlendMasterDistance;
+        stDerived.lrClearanceRelative :=
+            stDerived.lrExitEndY - stDerived.lrExitBlendEnd;
+        stDerived.lrEntryStartY :=
+            stDerived.lrEntryBlendStart + stDerived.lrClearanceRelative;
+        stDerived.lrSecondStartY :=
+            stRecipe.lrSecondEdgeStart + stRecipe.lrObjectEdgeLength;
+        stDerived.lrSecondEndY := stDerived.lrSecondStartY
+            + stDerived.lrSecondSlope * stDerived.lrCutMasterDistance;
+
+        // Symmetric jerk-limited stop distance from steady conveyor speed.
+        IF stRecipe.lrConveyorVelocity >=
+           (stRecipe.lrMasterDeceleration * stRecipe.lrMasterDeceleration
+            / stRecipe.lrMasterJerk) THEN
+            stDerived.lrMasterStopDistance :=
+                0.5 * stRecipe.lrConveyorVelocity
+                * (stRecipe.lrConveyorVelocity / stRecipe.lrMasterDeceleration
+                   + stRecipe.lrMasterDeceleration / stRecipe.lrMasterJerk);
+        ELSE
+            stDerived.lrMasterStopDistance :=
+                stRecipe.lrConveyorVelocity
+                * SQRT(stRecipe.lrConveyorVelocity / stRecipe.lrMasterJerk);
+        END_IF;
+        stDerived.lrStopWindowMargin :=
+            2.0 * c_lrPlcCycleSeconds * stRecipe.lrConveyorVelocity;
+
+        IF stRecipe.lrFirstEdgeStart <= stRecipe.lrBlendMasterDistance THEN
+            eError := CAM_ERROR_RECIPE_PHASE_ORDER;
+        ELSIF stDerived.lrExitBlendEnd >= stDerived.lrEntryBlendStart THEN
+            eError := CAM_ERROR_RECIPE_SYNC_SPACE;
+        ELSIF (stDerived.lrSecondEdgeEnd >= stRecipe.lrReturnEndPhase)
+           OR (stRecipe.lrReturnEndPhase >= stRecipe.lrObjectPitch) THEN
+            eError := CAM_ERROR_RECIPE_RETURN_SPACE;
+        ELSIF (stDerived.lrMasterStopDistance
+               + stDerived.lrStopWindowMargin)
+              > (stRecipe.lrObjectPitch - stRecipe.lrReturnEndPhase) THEN
+            eError := CAM_ERROR_RECIPE_DYNAMICS;
+        ELSE
+            bValid := TRUE;
+        END_IF;
+    END_IF;
+
+    bError := NOT bValid;
+    bDone := TRUE;
+END_IF;
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CamRecipeValidator">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="116" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

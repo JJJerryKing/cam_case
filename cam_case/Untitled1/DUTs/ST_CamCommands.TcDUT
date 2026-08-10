@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="ST_CamCommands" Id="{0a3083a8-7cb6-4a97-92a4-a3db177c5250}">
+    <Declaration><![CDATA[TYPE ST_CamCommands :
+STRUCT
+    bEnable : BOOL;
+    bReference : BOOL;
+    bApplyRecipe : BOOL;
+    bStart : BOOL;
+    bStop : BOOL;
+    bReset : BOOL;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

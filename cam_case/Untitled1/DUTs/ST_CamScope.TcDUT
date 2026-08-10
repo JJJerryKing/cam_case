@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="ST_CamScope" Id="{5a668069-7217-4d4f-8e95-062ffc6b7233}">
+    <Declaration><![CDATA[TYPE ST_CamScope :
+STRUCT
+    lrMasterSetPosition : LREAL;
+    lrMasterActualPosition : LREAL;
+    lrMasterSetVelocity : LREAL;
+    lrMasterActualVelocity : LREAL;
+    lrMasterPhase : LREAL;
+    lrSlaveSetPosition : LREAL;
+    lrSlaveActualPosition : LREAL;
+    lrSlaveSetVelocity : LREAL;
+    lrSlaveActualVelocity : LREAL;
+    lrExpectedSlaveVelocity : LREAL;
+    lrObjectRelativePosition : LREAL;
+    eMachineState : E_CamMachineState;
+    eProcessPhase : E_CamProcessPhase;
+    bCamActive : BOOL;
+    bRecipeLoaded : BOOL;
+    eApplicationError : E_CamApplicationError;
+    udiMotionErrorID : UDINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

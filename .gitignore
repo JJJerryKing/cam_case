@@ -6,6 +6,7 @@
 *.userprefs
 *.~u
 *.bak
+**/VSSettings/
 
 # TwinCAT generated and deployment artifacts
 **/_Boot/

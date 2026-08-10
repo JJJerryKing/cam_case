@@ -1,0 +1,203 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_ElectronicCam" Id="{5d09873a-d4fa-4716-8e2b-2a5e5b2deb9d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ElectronicCam
+VAR_INPUT
+    bLoad : BOOL;
+    bCouple : BOOL;
+    bDecouple : BOOL;
+    bReset : BOOL;
+    nCamTableId : MC_CAM_ID := 1;
+END_VAR
+VAR_IN_OUT
+    Master : AXIS_REF;
+    Slave : AXIS_REF;
+    CamTable : MC_CAM_REF;
+END_VAR
+VAR_OUTPUT
+    bLoadDone : BOOL;
+    bCoupleDone : BOOL;
+    bDecoupleDone : BOOL;
+    bBusy : BOOL;
+    bCamActive : BOOL;
+    bError : BOOL;
+    eApplicationError : E_CamApplicationError;
+    eErrorSource : E_CamErrorSource;
+    udiErrorID : UDINT;
+    stCharacteristics : MC_TableCharacValues;
+END_VAR
+VAR
+    rtLoad : R_TRIG;
+    rtCouple : R_TRIG;
+    rtDecouple : R_TRIG;
+    fbTableSelect : MC_CamTableSelect;
+    fbCharacteristics : MC_ReadCamTableCharacteristics;
+    fbCamIn : MC_CamIn;
+    fbCamOut : MC_CamOut;
+    stCamInOptions : ST_CamInOptions;
+    stCharacteristicsOptions : ST_ReadCamTableCharacteristicsOptions;
+    stCamOutOptions : ST_CamOutOptions;
+    bTableSelectExecute : BOOL;
+    bCharacteristicsExecute : BOOL;
+    bCamInExecute : BOOL;
+    bCamOutExecute : BOOL;
+    usiLoadState : USINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtLoad(CLK := bLoad);
+rtCouple(CLK := bCouple);
+rtDecouple(CLK := bDecouple);
+
+bLoadDone := FALSE;
+bCoupleDone := FALSE;
+bDecoupleDone := FALSE;
+
+IF bReset THEN
+    bTableSelectExecute := FALSE;
+    bCharacteristicsExecute := FALSE;
+    bCamInExecute := FALSE;
+    bCamOutExecute := FALSE;
+    usiLoadState := 0;
+    bError := FALSE;
+    eApplicationError := CAM_ERROR_NONE;
+    eErrorSource := CAM_SOURCE_NONE;
+    udiErrorID := 0;
+END_IF;
+
+// Accept at most one command when the wrapper is idle.
+IF NOT bReset AND NOT bError THEN
+    IF rtLoad.Q
+       AND (usiLoadState = 0)
+       AND NOT bCamInExecute
+       AND NOT bCamOutExecute
+       AND NOT bCamActive THEN
+        usiLoadState := 10;
+        bTableSelectExecute := TRUE;
+    ELSIF rtCouple.Q
+       AND (usiLoadState = 0)
+       AND NOT bCamInExecute
+       AND NOT bCamOutExecute
+       AND NOT bCamActive THEN
+        bCamInExecute := TRUE;
+    ELSIF rtDecouple.Q
+       AND (usiLoadState = 0)
+       AND NOT bCamInExecute
+       AND NOT bCamOutExecute
+       AND bCamActive THEN
+        bCamOutExecute := TRUE;
+    END_IF;
+END_IF;
+
+fbTableSelect(
+    Execute := bTableSelectExecute,
+    Periodic := TRUE,
+    MasterAbsolute := FALSE,
+    SlaveAbsolute := FALSE,
+    CamTableID := nCamTableId,
+    Master := Master,
+    Slave := Slave,
+    CamTable := CamTable);
+fbCharacteristics(
+    Execute := bCharacteristicsExecute,
+    CamTableID := nCamTableId,
+    Options := stCharacteristicsOptions,
+    CamTableCharac := stCharacteristics);
+fbCamIn(
+    Execute := bCamInExecute,
+    MasterOffset := 0.0,
+    SlaveOffset := 0.0,
+    MasterScaling := 1.0,
+    SlaveScaling := 1.0,
+    StartMode := MC_STARTMODE_RELATIVE,
+    CamTableID := nCamTableId,
+    BufferMode := MC_Aborting,
+    Options := stCamInOptions,
+    Master := Master,
+    Slave := Slave);
+fbCamOut(
+    Execute := bCamOutExecute,
+    Options := stCamOutOptions,
+    Slave := Slave);
+
+IF NOT bReset THEN
+    // Preserve the first NC error until the caller resets this wrapper.
+    IF NOT bError THEN
+        IF fbTableSelect.Error THEN
+            bError := TRUE;
+            eApplicationError := CAM_ERROR_CAM_LOAD;
+            eErrorSource := CAM_SOURCE_TABLE_LOAD;
+            udiErrorID := fbTableSelect.ErrorID;
+        ELSIF fbCharacteristics.Error THEN
+            bError := TRUE;
+            eApplicationError := CAM_ERROR_CAM_CHARACTERISTICS;
+            eErrorSource := CAM_SOURCE_TABLE_CHARACTERISTICS;
+            udiErrorID := fbCharacteristics.ErrorID;
+        ELSIF fbCamIn.Error OR fbCamIn.CommandAborted THEN
+            bError := TRUE;
+            eApplicationError := CAM_ERROR_CAM_IN;
+            eErrorSource := CAM_SOURCE_CAM_IN;
+            udiErrorID := fbCamIn.ErrorID;
+        ELSIF fbCamOut.Error THEN
+            bError := TRUE;
+            eApplicationError := CAM_ERROR_CAM_OUT;
+            eErrorSource := CAM_SOURCE_CAM_OUT;
+            udiErrorID := fbCamOut.ErrorID;
+        END_IF;
+    END_IF;
+
+    IF bError THEN
+        bTableSelectExecute := FALSE;
+        bCharacteristicsExecute := FALSE;
+        bCamInExecute := FALSE;
+        bCamOutExecute := FALSE;
+        usiLoadState := 0;
+    ELSE
+        CASE usiLoadState OF
+            10:
+                IF fbTableSelect.Done THEN
+                    bTableSelectExecute := FALSE;
+                    bCharacteristicsExecute := TRUE;
+                    usiLoadState := 20;
+                END_IF;
+
+            20:
+                IF fbCharacteristics.Done THEN
+                    bCharacteristicsExecute := FALSE;
+                    usiLoadState := 0;
+                    bLoadDone := TRUE;
+                END_IF;
+        END_CASE;
+
+        IF fbCamIn.InSync THEN
+            bCamInExecute := FALSE;
+            bCamActive := TRUE;
+            bCoupleDone := TRUE;
+        END_IF;
+
+        IF fbCamOut.Done THEN
+            bCamOutExecute := FALSE;
+            bCamActive := FALSE;
+            bDecoupleDone := TRUE;
+        END_IF;
+    END_IF;
+END_IF;
+
+bBusy := (usiLoadState <> 0)
+    OR bTableSelectExecute
+    OR bCharacteristicsExecute
+    OR bCamInExecute
+    OR bCamOutExecute
+    OR fbTableSelect.Busy
+    OR fbCharacteristics.Busy
+    OR fbCamIn.Busy
+    OR fbCamOut.Busy;
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ElectronicCam">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="145" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <GVL Name="GVL_CamControl" Id="{2e8a0fb7-f209-46a4-9dcd-cfcb8e1b7465}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+    stCommands : ST_CamCommands;
+    stRecipe : ST_CamRecipe;
+    stStatus : ST_CamStatus;
+    stScope : ST_CamScope;
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>

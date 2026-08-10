@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="Axis_test" Id="{f0a9d9de-a053-4cc5-a6aa-b4563593a597}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM Axis_test
+VAR
+    // Online commands: bMoveAbsolute and bStop are rising-edge commands.
+    bPower : BOOL := FALSE;
+    bMoveAbsolute : BOOL := FALSE;
+    bStop : BOOL := FALSE;
+	bReset : BOOL := FALSE;
+
+    // Values use the engineering unit configured for the selected NC axis.
+    lrTargetPosition : LREAL := 0.0;
+    lrVelocity : LREAL := 5.0;
+    lrAcceleration : LREAL := 20.0;
+    lrDeceleration : LREAL := 20.0;
+    lrJerk : LREAL := 100.0;
+
+    // Online diagnostics.
+    bPowerStatus : BOOL;
+    bMoveBusy : BOOL;
+    bMoveDone : BOOL;
+    bStopDone : BOOL;
+    bError : BOOL;
+    udiErrorID : UDINT;
+    lrActualPosition : LREAL;
+
+    fbAxisTest : FB_AxisPositionTest;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbAxisTest(
+    bPower := bPower,
+    bMoveAbsolute := bMoveAbsolute,
+	bReset := bReset,
+    bStop := bStop,
+    lrTargetPosition := lrTargetPosition,
+    lrVelocity := lrVelocity,
+    lrAcceleration := lrAcceleration,
+    lrDeceleration := lrDeceleration,
+    lrJerk := lrJerk,
+    // Change only this line to select another test axis.
+    Axis := GVL_Motion.gAxisConveyor,
+    bPowerStatus => bPowerStatus,
+    bMoveBusy => bMoveBusy,
+    bMoveDone => bMoveDone,
+    bStopDone => bStopDone,
+    bError => bError,
+    udiErrorID => udiErrorID,
+    lrActualPosition => lrActualPosition);
+]]></ST>
+    </Implementation>
+    <LineIds Name="Axis_test">
+      <LineId Id="1" Count="0" />
+      <LineId Id="4" Count="1" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="6" Count="14" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

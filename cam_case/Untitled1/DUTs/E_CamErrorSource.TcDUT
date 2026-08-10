@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="E_CamErrorSource" Id="{f93adb1f-408f-4e40-b084-b60ac4754ef9}">
+    <Declaration><![CDATA[TYPE E_CamErrorSource :
+(
+    CAM_SOURCE_NONE := 0,
+    CAM_SOURCE_RECIPE,
+    CAM_SOURCE_MASTER_AXIS,
+    CAM_SOURCE_SLAVE_AXIS,
+    CAM_SOURCE_TABLE_LOAD,
+    CAM_SOURCE_TABLE_CHARACTERISTICS,
+    CAM_SOURCE_CAM_IN,
+    CAM_SOURCE_CAM_OUT
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

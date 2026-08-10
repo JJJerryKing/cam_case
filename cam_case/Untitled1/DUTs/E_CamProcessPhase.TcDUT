@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="E_CamProcessPhase" Id="{224f5409-144d-437a-91a5-762eb8d197f5}">
+    <Declaration><![CDATA[TYPE E_CamProcessPhase :
+(
+    CAM_PHASE_DISABLED := 0,
+    CAM_PHASE_PREPARE,
+    CAM_PHASE_APPROACH,
+    CAM_PHASE_FIRST_EDGE,
+    CAM_PHASE_EXIT_FIRST_EDGE,
+    CAM_PHASE_SYNCHRONOUS,
+    CAM_PHASE_ENTER_SECOND_EDGE,
+    CAM_PHASE_SECOND_EDGE,
+    CAM_PHASE_RETURN,
+    CAM_PHASE_DWELL
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

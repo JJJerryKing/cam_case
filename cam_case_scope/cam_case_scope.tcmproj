@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{55017584-42dc-40a8-880a-05bced1c2d9e}</ProjectGuid>
+    <AssemblyName>cam_case_scope</AssemblyName>
+    <Name>cam_case_scope</Name>
+    <RootNamespace>cam_case_scope</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="YT Scope Project.tcscopex">
+      <SubType>Content</SubType>
+    </Content>
+  </ItemGroup>
+</Project>

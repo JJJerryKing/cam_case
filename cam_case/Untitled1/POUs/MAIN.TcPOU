@@ -3,12 +3,21 @@
   <POU Name="MAIN" Id="{4a4be6dc-9e2b-467b-a657-9d8f59dc44c0}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
+    fbCamMachine : FB_CamMachine;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[]]></ST>
+      <ST><![CDATA[fbCamMachine(
+    stCommands := GVL_CamControl.stCommands,
+    stRecipe := GVL_CamControl.stRecipe,
+    AxisConveyor := GVL_Motion.gAxisConveyor,
+    AxisCutter := GVL_Motion.gAxisCutter,
+    stStatus => GVL_CamControl.stStatus,
+    stScope => GVL_CamControl.stScope);
+]]></ST>
     </Implementation>
     <LineIds Name="MAIN">
+      <LineId Id="6" Count="6" />
       <LineId Id="2" Count="0" />
     </LineIds>
   </POU>

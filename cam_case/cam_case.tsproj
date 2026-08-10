@@ -1449,6 +1449,11 @@ External Setpoint Generation:
 	</ImageDatas>
 	<Project ProjectGUID="{A3453F54-237A-4EDD-964A-61FC2260ECB6}" TargetNetId="5.57.253.57.1.1" ShowHideConfigurations="#x6">
 		<System>
+			<Licenses>
+				<Target>
+					<ManualSelect>{3DDCAB25-BF0E-412C-A721-DC77C1B8099C}</ManualSelect>
+				</Target>
+			</Licenses>
 			<Tasks>
 				<Task Id="3" Priority="20" CycleTime="100000" AmsPort="350" AdtTasks="true">
 					<Name>PlcTask</Name>
@@ -1536,7 +1541,7 @@ External Setpoint Generation:
 						</Vars>
 					</Encoder>
 					<Drive Name="Drive" DrvType="16">
-						<DrvPara MaxCount="#xffffffff" DriveControlDWord="#x00020000">
+						<DrvPara MaxCount="#xffffffff">
 							<Analog TorqueSetpointScale="10" ScaleFactorActTorque="0.1"/>
 							<TimeComp TaskDelayCycles="1"/>
 						</DrvPara>
@@ -1675,7 +1680,7 @@ External Setpoint Generation:
 						</Vars>
 					</Encoder>
 					<Drive Name="Drive" DrvType="16">
-						<DrvPara MaxCount="#xffffffff" DriveControlDWord="#x00020000">
+						<DrvPara MaxCount="#xffffffff">
 							<Analog TorqueSetpointScale="10" ScaleFactorActTorque="0.1"/>
 							<TimeComp TaskDelayCycles="1"/>
 						</DrvPara>
@@ -1754,21 +1759,31 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{28D934E2-E532-4CF2-B40E-DA92E575FCCF}" Name="Untitled1" PrjFilePath="Untitled1\Untitled1.plcproj" TmcFilePath="Untitled1\Untitled1.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="Untitled1\Untitled1.tmc" TmcHash="{4A3DA21B-826D-8150-DC96-E7AF5280060C}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="Untitled1\Untitled1.tmc" TmcHash="{BD56F16D-720D-8879-DD70-BAF913E2EA8A}">
 					<Name>Untitled1 Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
-					<UnrestoredVarLinks ImportTime="2026-08-05T15:05:04">
-						<OwnerA Name="InputDst" Prefix="TIPC^Untitled1^Untitled1 Instance" Type="1">
-							<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 1">
-								<Link VarA="GVL_Motion.gAxisConveyor.NcToPlc" TypeA="MC.NCTOPLC_AXIS_REF" InOutA="0" GuidA="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" VarB="Outputs^ToPlc" RestoreInfo="ANotFound"/>
-							</OwnerB>
-						</OwnerA>
-						<OwnerA Name="OutputSrc" Prefix="TIPC^Untitled1^Untitled1 Instance" Type="2">
-							<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 1">
-								<Link VarA="GVL_Motion.gAxisConveyor.PlcToNc" TypeA="MC.PLCTONC_AXIS_REF" InOutA="1" GuidA="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" VarB="Inputs^FromPlc" RestoreInfo="ANotFound"/>
-							</OwnerB>
-						</OwnerA>
-					</UnrestoredVarLinks>
+					<Vars VarGrpType="1">
+						<Name>PlcTask Inputs</Name>
+						<Var>
+							<Name>GVL_Motion.gAxisConveyor.NcToPlc</Name>
+							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
+						</Var>
+						<Var>
+							<Name>GVL_Motion.gAxisCutter.NcToPlc</Name>
+							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
+						</Var>
+					</Vars>
+					<Vars VarGrpType="2" AreaNo="1">
+						<Name>PlcTask Outputs</Name>
+						<Var>
+							<Name>GVL_Motion.gAxisConveyor.PlcToNc</Name>
+							<Type GUID="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" Namespace="MC">PLCTONC_AXIS_REF</Type>
+						</Var>
+						<Var>
+							<Name>GVL_Motion.gAxisCutter.PlcToNc</Name>
+							<Type GUID="{96B75FEB-2D84-43BE-A3EC-D9A681F27D52}" Namespace="MC">PLCTONC_AXIS_REF</Type>
+						</Var>
+					</Vars>
 					<Contexts>
 						<Context>
 							<Id>0</Id>
@@ -1799,7 +1814,7 @@ External Setpoint Generation:
 				<Image Id="3" AddrType="9" ImageType="3">
 					<Name>Image</Name>
 				</Image>
-				<Box Id="1" BoxType="9099" BoxFlags="#x00000020">
+				<Box Id="1" BoxType="9099">
 					<Name>Drive 1 (INVT_DA180_114)</Name>
 					<ImageId>3</ImageId>
 					<EtherCAT SlaveType="2" PdiType="#x0c08" MboxDataLinkLayer="true" StateMBoxPolling="true" CycleMBoxPollingTime="0" CoeType="15" VendorId="#x00000616" ProductCode="#x00000003" RevisionNo="#x00000064" InfoDataAddr="true" InfoDataSoeDS401="true" InfoDataDcTimes="true" PortPhys="17" MaxSlotCount="256" MaxSlotGroupCount="1" SlotPdoIncrement="1" SlotIndexIncrement="16" Type="DA180-N EtherCAT(CoE) Drive" Desc="INVT_DA180_114" PortABoxInfo="#x00ffffff">
@@ -1874,9 +1889,9 @@ External Setpoint Generation:
 						<CoeProfile ProfileNo="402"/>
 					</EtherCAT>
 				</Box>
-				<Box Id="2" BoxType="9099" BoxFlags="#x00000020">
+				<Box Id="2" BoxType="9099">
 					<Name>Drive 2 (INVT_DA200A_EtherCAT_101)</Name>
-					<ImageId>65</ImageId>
+					<ImageId>114</ImageId>
 					<EtherCAT SlaveType="2" PdiType="#x0c09" MboxDataLinkLayer="true" CycleMBoxPolling="true" CoeType="15" VendorId="#x0000072c" ProductCode="#x0000200a" RevisionNo="#x000000ab" InfoDataAddr="true" InfoDataSoeDS401="true" InfoDataDcTimes="true" PortPhys="17" MaxSlotCount="256" MaxSlotGroupCount="1" SlotPdoIncrement="1" SlotIndexIncrement="16" Type="INVT_DA200A_EtherCAT_1.0.1.0" Desc="INVT_DA200A_EtherCAT_101" PortABoxInfo="#x01000001">
 						<SyncMan>001000022600010001000000000000000002001026010000</SyncMan>
 						<SyncMan>001200022200010002000000000000000002001222010000</SyncMan>
@@ -2225,6 +2240,16 @@ Bit1: Value smaller than Limit2]]></Comment>
 				<Link VarA="Enc^Inputs^In^nState6" VarB="Inputs^Touch Probe Status" Size="8" OffsB="8"/>
 				<Link VarA="Enc^Outputs^Out^nCtrl5" VarB="Outputs^Touch probe control"/>
 				<Link VarA="Enc^Outputs^Out^nCtrl6" VarB="Outputs^Touch probe control" Size="8" OffsB="8"/>
+			</OwnerB>
+		</OwnerA>
+		<OwnerA Name="TIPC^Untitled1^Untitled1 Instance">
+			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 1">
+				<Link VarA="PlcTask Inputs^GVL_Motion.gAxisConveyor.NcToPlc" VarB="Outputs^ToPlc"/>
+				<Link VarA="PlcTask Outputs^GVL_Motion.gAxisConveyor.PlcToNc" VarB="Inputs^FromPlc"/>
+			</OwnerB>
+			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 2">
+				<Link VarA="PlcTask Inputs^GVL_Motion.gAxisCutter.NcToPlc" VarB="Outputs^ToPlc"/>
+				<Link VarA="PlcTask Outputs^GVL_Motion.gAxisCutter.PlcToNc" VarB="Inputs^FromPlc"/>
 			</OwnerB>
 		</OwnerA>
 	</Mappings>
