@@ -15,11 +15,11 @@ class PhysicalCamModelTests(unittest.TestCase):
             actual,
             [
                 (0.0, 0.0, 0.0),
-                (1.0, -1.0, -1.6),
-                (6.0, -9.0, -1.6),
-                (11.0, -14.0, -0.4),
-                (16.0, -16.0, -0.4),
-                (17.0, -16.2, 0.0),
+                (1.0, -1.0, -0.4),
+                (6.0, -3.0, -0.4),
+                (10.0, -7.0, -1.6),
+                (15.0, -15.0, -1.6),
+                (17.0, -16.6, 0.0),
                 (27.0, 0.0, 0.0),
                 (63.7, 0.0, 0.0),
             ],
@@ -34,16 +34,16 @@ class PhysicalCamModelTests(unittest.TestCase):
 
     def test_two_second_return_dynamics(self):
         peak_velocity, peak_acceleration, peak_jerk = (
-            quintic_peak_return_dynamics(distance=16.2, seconds=2.0)
+            quintic_peak_return_dynamics(distance=16.6, seconds=2.0)
         )
-        self.assertAlmostEqual(peak_velocity, 15.1875, places=4)
-        self.assertAlmostEqual(peak_acceleration, 23.3827, places=3)
-        self.assertAlmostEqual(peak_jerk, 121.5, places=3)
+        self.assertAlmostEqual(peak_velocity, 15.5625, places=4)
+        self.assertAlmostEqual(peak_acceleration, 23.9600, places=3)
+        self.assertAlmostEqual(peak_jerk, 124.5, places=3)
 
     def test_default_cut_velocities_are_visibly_different(self):
         recipe = Recipe()
-        self.assertEqual(recipe.first_cutter_velocity, -8.0)
-        self.assertEqual(recipe.second_cutter_velocity, -2.0)
+        self.assertEqual(recipe.first_cutter_velocity, -2.0)
+        self.assertEqual(recipe.second_cutter_velocity, -8.0)
 
 
 if __name__ == "__main__":

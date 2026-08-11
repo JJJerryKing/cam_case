@@ -11,11 +11,11 @@ class Recipe:
 
     @property
     def first_cutter_velocity(self) -> float:
-        return -(self.conveyor_velocity + self.cut_velocity)
+        return -(self.conveyor_velocity - self.cut_velocity)
 
     @property
     def second_cutter_velocity(self) -> float:
-        return -(self.conveyor_velocity - self.cut_velocity)
+        return -(self.conveyor_velocity + self.cut_velocity)
 
 
 @dataclass(frozen=True)
@@ -28,18 +28,18 @@ class Point:
 def derive_points(recipe: Recipe) -> list[Point]:
     return [
         Point(0.0, 0.0, 0.0),
-        Point(1.0, -1.0, -1.6),
-        Point(6.0, -9.0, -1.6),
-        Point(11.0, -14.0, -0.4),
-        Point(16.0, -16.0, -0.4),
-        Point(17.0, -16.2, 0.0),
+        Point(1.0, -1.0, -0.4),
+        Point(6.0, -3.0, -0.4),
+        Point(10.0, -7.0, -1.6),
+        Point(15.0, -15.0, -1.6),
+        Point(17.0, -16.6, 0.0),
         Point(27.0, 0.0, 0.0),
         Point(recipe.pitch, 0.0, 0.0),
     ]
 
 
 def object_relative_position(point: Point) -> float:
-    return point.y + point.x
+    return -(point.y + point.x)
 
 
 def quintic_peak_return_dynamics(
