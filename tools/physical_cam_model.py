@@ -42,6 +42,15 @@ def object_relative_position(point: Point) -> float:
     return -(point.y + point.x)
 
 
+def shortest_periodic_target(
+    current: float, phase: float, pitch: float
+) -> float:
+    if pitch <= 0.0:
+        raise ValueError("pitch must be positive")
+    delta = (phase - current + pitch / 2.0) % pitch - pitch / 2.0
+    return current + delta
+
+
 def quintic_peak_return_dynamics(
     distance: float, seconds: float
 ) -> tuple[float, float, float]:
