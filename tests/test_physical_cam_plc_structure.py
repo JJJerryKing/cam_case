@@ -36,8 +36,12 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
 
     def test_machine_state_positions_slave_instead_of_zeroing_it(self):
         text = source("DUTs/E_CamMachineState.TcDUT")
+        self.assertIn("CAM_STATE_POSITIONING_MASTER", text)
         self.assertIn("CAM_STATE_POSITIONING_SLAVE", text)
         self.assertNotIn("CAM_STATE_REFERENCING_SLAVE", text)
+        positioning_master = text.index("CAM_STATE_POSITIONING_MASTER")
+        referencing_master = text.index("CAM_STATE_REFERENCING_MASTER")
+        self.assertLess(positioning_master, referencing_master)
 
     def test_validator_uses_negative_slopes_and_direct_transition(self):
         text = source("POUs/Cam/FB_CamRecipeValidator.TcPOU")
