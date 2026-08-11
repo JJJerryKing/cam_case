@@ -7,16 +7,14 @@ STRUCT
     lrFirstSlope : LREAL;
     lrSecondSlope : LREAL;
     lrFirstEdgeEnd : LREAL;
-    lrExitBlendEnd : LREAL;
-    lrEntryBlendStart : LREAL;
+    lrInterEdgeTransitionEnd : LREAL;
     lrSecondEdgeEnd : LREAL;
-    lrClearanceRelative : LREAL;
+    lrExitEnd : LREAL;
     lrFirstStartY : LREAL;
     lrFirstEndY : LREAL;
-    lrExitEndY : LREAL;
-    lrEntryStartY : LREAL;
-    lrSecondStartY : LREAL;
+    lrTransitionEndY : LREAL;
     lrSecondEndY : LREAL;
+    lrExitEndY : LREAL;
     lrMasterStopDistance : LREAL;
     lrStopWindowMargin : LREAL;
 END_STRUCT

@@ -3,24 +3,27 @@
   <DUT Name="ST_CamRecipe" Id="{508fe896-e49a-47db-8cdd-6ac739ff50a2}">
     <Declaration><![CDATA[TYPE ST_CamRecipe :
 STRUCT
-    lrObjectPitch : LREAL := 500.0;
-    lrConveyorVelocity : LREAL := 100.0;
-    lrCutVelocity : LREAL := 50.0;
-    lrObjectEdgeLength : LREAL := 25.0;
-    lrFirstEdgeStart : LREAL := 100.0;
-    lrSecondEdgeStart : LREAL := 300.0;
-    lrBlendMasterDistance : LREAL := 20.0;
-    lrReturnEndPhase : LREAL := 480.0;
+    lrObjectPitch : LREAL := 63.7;
+    lrConveyorVelocity : LREAL := 5.0;
+    lrCutVelocity : LREAL := 3.0;
+    lrObjectEdgeLength : LREAL := 3.0;
+    lrFirstEdgeStart : LREAL := 1.0;
+    lrInterEdgeTransitionDistance : LREAL := 5.0;
+    lrExitTransitionDistance : LREAL := 1.0;
+    lrReturnStartPhase : LREAL := 17.0;
+    lrReturnEndPhase : LREAL := 27.0;
+    lrCutterReadyPosition : LREAL := 17.0;
+    lrMasterReferenceRawPosition : LREAL := -0.6;
     lrMasterAcceleration : LREAL := 500.0;
     lrMasterDeceleration : LREAL := 500.0;
     lrMasterJerk : LREAL := 5000.0;
     lrMaxSlaveVelocity : LREAL := 600.0;
     lrMaxSlaveAcceleration : LREAL := 1600.0;
     lrMaxSlaveJerk : LREAL := 12000.0;
-    lrRecoveryVelocity : LREAL := 100.0;
-    lrRecoveryAcceleration : LREAL := 500.0;
-    lrRecoveryDeceleration : LREAL := 500.0;
-    lrRecoveryJerk : LREAL := 5000.0;
+    lrRecoveryVelocity : LREAL := 20.0;
+    lrRecoveryAcceleration : LREAL := 100.0;
+    lrRecoveryDeceleration : LREAL := 100.0;
+    lrRecoveryJerk : LREAL := 1000.0;
     lrPositionTolerance : LREAL := 0.1;
 END_STRUCT
 END_TYPE
