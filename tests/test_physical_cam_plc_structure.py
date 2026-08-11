@@ -78,20 +78,37 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
         text = source("POUs/Cam/FB_CamMachine.TcPOU")
         self.assertIn("fbMoveConveyorToReference : MC_MoveAbsolute", text)
         self.assertIn("CAM_STATE_POSITIONING_MASTER:", text)
-        self.assertIn("Position := stRecipe.lrMasterReferenceRawPosition", text)
+        self.assertIn("bConveyorCoordinateZeroed : BOOL", text)
+        self.assertIn("lrMasterReferencePhase : LREAL", text)
+        self.assertIn("lrMasterReferenceTarget : LREAL", text)
+        self.assertIn("IF bConveyorCoordinateZeroed THEN", text)
+        self.assertIn("lrMasterReferencePhase := 0.0", text)
+        self.assertIn("lrMasterReferencePhase :=", text)
+        self.assertIn("stRecipe.lrMasterReferenceRawPosition", text)
+        self.assertIn("MODABS(", text)
+        self.assertIn("stRecipe.lrObjectPitch / 2.0", text)
+        self.assertIn("Position := lrMasterReferenceTarget", text)
+        self.assertNotIn(
+            "Position := stRecipe.lrMasterReferenceRawPosition", text
+        )
         self.assertIn("Velocity := stRecipe.lrConveyorVelocity", text)
         self.assertIn("Acceleration := stRecipe.lrMasterAcceleration", text)
         self.assertIn("Deceleration := stRecipe.lrMasterDeceleration", text)
         self.assertIn("Jerk := stRecipe.lrMasterJerk", text)
+        self.assertIn("AxisConveyor.NcToPlc.SetPos", text)
+        self.assertIn("AxisConveyor.NcToPlc.ActPos", text)
+        self.assertGreaterEqual(text.count("- lrMasterReferenceTarget"), 2)
+        self.assertIn(
+            "stSetPositionConveyorOptions.ClearPositionLag := TRUE", text
+        )
+        self.assertIn("bConveyorCoordinateZeroed := TRUE", text)
+        self.assertNotIn("bConveyorCoordinateZeroed := FALSE", text)
+        self.assertIn("CAM_ERROR_RECIPE_PITCH", text)
         positioning = text.index("CAM_STATE_POSITIONING_MASTER:")
         zeroing = text.index("CAM_STATE_REFERENCING_MASTER:")
         slave = text.index("CAM_STATE_POSITIONING_SLAVE:")
         self.assertLess(positioning, zeroing)
         self.assertLess(zeroing, slave)
-        self.assertNotIn(
-            "AxisConveyor.NcToPlc.ActPos\n                         - stRecipe.lrMasterReferenceRawPosition",
-            text,
-        )
         self.assertNotIn("fbSetPositionCutter", text)
 
     def test_machine_couples_before_starting_master(self):

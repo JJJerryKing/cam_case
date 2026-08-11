@@ -63,6 +63,7 @@ VAR
 
     bPowerRequest : BOOL;
     bReferenced : BOOL;
+    bConveyorCoordinateZeroed : BOOL;
     bRecipeLoaded : BOOL;
     bStopRequested : BOOL;
     bResetInProgress : BOOL;
@@ -91,6 +92,8 @@ VAR
 
     lrMasterCycleOrigin : LREAL;
     lrMasterPhase : LREAL;
+    lrMasterReferencePhase : LREAL;
+    lrMasterReferenceTarget : LREAL;
     lrSlaveCycleOrigin : LREAL;
     lrSlaveCamPosition : LREAL;
     lrCutterMoveTarget : LREAL := 17.0;
@@ -177,11 +180,31 @@ CASE eState OF
         ELSIF rtReference.Q THEN
             IF AxisConveyor.Status.NotMoving
                AND AxisCutter.Status.NotMoving THEN
-                bReferenced := FALSE;
-                bRecipeLoaded := FALSE;
-                lrCutterMoveTarget := stRecipe.lrCutterReadyPosition;
-                bMoveConveyorToReferenceExecute := TRUE;
-                eState := CAM_STATE_POSITIONING_MASTER;
+                IF stRecipe.lrObjectPitch > 0.0 THEN
+                    bReferenced := FALSE;
+                    bRecipeLoaded := FALSE;
+                    lrCutterMoveTarget := stRecipe.lrCutterReadyPosition;
+                    IF bConveyorCoordinateZeroed THEN
+                        lrMasterReferencePhase := 0.0;
+                    ELSE
+                        lrMasterReferencePhase :=
+                            stRecipe.lrMasterReferenceRawPosition;
+                    END_IF;
+                    lrMasterReferenceTarget :=
+                        AxisConveyor.NcToPlc.SetPos
+                        + MODABS(
+                            lrMasterReferencePhase
+                            - AxisConveyor.NcToPlc.SetPos
+                            + stRecipe.lrObjectPitch / 2.0,
+                            stRecipe.lrObjectPitch)
+                        - stRecipe.lrObjectPitch / 2.0;
+                    bMoveConveyorToReferenceExecute := TRUE;
+                    eState := CAM_STATE_POSITIONING_MASTER;
+                ELSE
+                    bRequestFault := TRUE;
+                    eRequestedApplicationError := CAM_ERROR_RECIPE_PITCH;
+                    eRequestedErrorSource := CAM_SOURCE_RECIPE;
+                END_IF;
             ELSE
                 bRequestFault := TRUE;
                 eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
@@ -226,13 +249,21 @@ CASE eState OF
             eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
             udiRequestedMotionErrorID := fbMoveConveyorToReference.ErrorID;
         ELSIF fbMoveConveyorToReference.Done
-           AND AxisConveyor.Status.NotMoving
-           AND (ABS(AxisConveyor.NcToPlc.SetPos
-                    - stRecipe.lrMasterReferenceRawPosition)
-                <= stRecipe.lrPositionTolerance) THEN
+           AND AxisConveyor.Status.NotMoving THEN
             bMoveConveyorToReferenceExecute := FALSE;
-            bSetPositionConveyorExecute := TRUE;
-            eState := CAM_STATE_REFERENCING_MASTER;
+            IF (ABS(AxisConveyor.NcToPlc.SetPos
+                    - lrMasterReferenceTarget)
+                <= stRecipe.lrPositionTolerance)
+               AND (ABS(AxisConveyor.NcToPlc.ActPos
+                        - lrMasterReferenceTarget)
+                    <= stRecipe.lrPositionTolerance) THEN
+                bSetPositionConveyorExecute := TRUE;
+                eState := CAM_STATE_REFERENCING_MASTER;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_AXIS_REFERENCE;
+                eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+            END_IF;
         END_IF;
 
     CAM_STATE_REFERENCING_MASTER:
@@ -242,8 +273,18 @@ CASE eState OF
             eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
         ELSIF fbSetPositionConveyor.Done THEN
             bSetPositionConveyorExecute := FALSE;
-            bReturnCutterExecute := TRUE;
-            eState := CAM_STATE_POSITIONING_SLAVE;
+            IF (ABS(AxisConveyor.NcToPlc.SetPos)
+                <= stRecipe.lrPositionTolerance)
+               AND (ABS(AxisConveyor.NcToPlc.ActPos)
+                    <= stRecipe.lrPositionTolerance) THEN
+                bConveyorCoordinateZeroed := TRUE;
+                bReturnCutterExecute := TRUE;
+                eState := CAM_STATE_POSITIONING_SLAVE;
+            ELSE
+                bRequestFault := TRUE;
+                eRequestedApplicationError := CAM_ERROR_AXIS_REFERENCE;
+                eRequestedErrorSource := CAM_SOURCE_MASTER_AXIS;
+            END_IF;
         END_IF;
 
     CAM_STATE_POSITIONING_SLAVE:
@@ -375,11 +416,31 @@ CASE eState OF
         ELSIF rtReference.Q THEN
             IF AxisConveyor.Status.NotMoving
                AND AxisCutter.Status.NotMoving THEN
-                bReferenced := FALSE;
-                bRecipeLoaded := FALSE;
-                lrCutterMoveTarget := stRecipe.lrCutterReadyPosition;
-                bMoveConveyorToReferenceExecute := TRUE;
-                eState := CAM_STATE_POSITIONING_MASTER;
+                IF stRecipe.lrObjectPitch > 0.0 THEN
+                    bReferenced := FALSE;
+                    bRecipeLoaded := FALSE;
+                    lrCutterMoveTarget := stRecipe.lrCutterReadyPosition;
+                    IF bConveyorCoordinateZeroed THEN
+                        lrMasterReferencePhase := 0.0;
+                    ELSE
+                        lrMasterReferencePhase :=
+                            stRecipe.lrMasterReferenceRawPosition;
+                    END_IF;
+                    lrMasterReferenceTarget :=
+                        AxisConveyor.NcToPlc.SetPos
+                        + MODABS(
+                            lrMasterReferencePhase
+                            - AxisConveyor.NcToPlc.SetPos
+                            + stRecipe.lrObjectPitch / 2.0,
+                            stRecipe.lrObjectPitch)
+                        - stRecipe.lrObjectPitch / 2.0;
+                    bMoveConveyorToReferenceExecute := TRUE;
+                    eState := CAM_STATE_POSITIONING_MASTER;
+                ELSE
+                    bRequestFault := TRUE;
+                    eRequestedApplicationError := CAM_ERROR_RECIPE_PITCH;
+                    eRequestedErrorSource := CAM_SOURCE_RECIPE;
+                END_IF;
             ELSE
                 bRequestFault := TRUE;
                 eRequestedApplicationError := CAM_ERROR_COMMAND_NOT_ALLOWED;
@@ -674,7 +735,7 @@ fbPowerCutter(
 
 fbMoveConveyorToReference(
     Execute := bMoveConveyorToReferenceExecute,
-    Position := stRecipe.lrMasterReferenceRawPosition,
+    Position := lrMasterReferenceTarget,
     Velocity := stRecipe.lrConveyorVelocity,
     Acceleration := stRecipe.lrMasterAcceleration,
     Deceleration := stRecipe.lrMasterDeceleration,
@@ -683,6 +744,7 @@ fbMoveConveyorToReference(
     Options := stMoveConveyorToReferenceOptions,
     Axis := AxisConveyor);
 
+stSetPositionConveyorOptions.ClearPositionLag := TRUE;
 fbSetPositionConveyor(
     Execute := bSetPositionConveyorExecute,
     Position := 0.0,
