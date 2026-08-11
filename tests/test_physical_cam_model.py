@@ -1,0 +1,50 @@
+import unittest
+
+from tools.physical_cam_model import (
+    Recipe,
+    derive_points,
+    object_relative_position,
+    quintic_peak_return_dynamics,
+)
+
+
+class PhysicalCamModelTests(unittest.TestCase):
+    def test_approved_eight_points(self):
+        actual = [(p.x, p.y, p.slope) for p in derive_points(Recipe())]
+        self.assertEqual(
+            actual,
+            [
+                (0.0, 0.0, 0.0),
+                (1.0, -1.0, -1.6),
+                (6.0, -9.0, -1.6),
+                (11.0, -14.0, -0.4),
+                (16.0, -16.0, -0.4),
+                (17.0, -16.2, 0.0),
+                (27.0, 0.0, 0.0),
+                (63.7, 0.0, 0.0),
+            ],
+        )
+
+    def test_each_cut_changes_object_relative_position_by_three_mm(self):
+        points = derive_points(Recipe())
+        self.assertAlmostEqual(object_relative_position(points[1]), 0.0)
+        self.assertAlmostEqual(object_relative_position(points[2]), -3.0)
+        self.assertAlmostEqual(object_relative_position(points[3]), -3.0)
+        self.assertAlmostEqual(object_relative_position(points[4]), 0.0)
+
+    def test_two_second_return_dynamics(self):
+        peak_velocity, peak_acceleration, peak_jerk = (
+            quintic_peak_return_dynamics(distance=16.2, seconds=2.0)
+        )
+        self.assertAlmostEqual(peak_velocity, 15.1875, places=4)
+        self.assertAlmostEqual(peak_acceleration, 23.3827, places=3)
+        self.assertAlmostEqual(peak_jerk, 121.5, places=3)
+
+    def test_default_cut_velocities_are_visibly_different(self):
+        recipe = Recipe()
+        self.assertEqual(recipe.first_cutter_velocity, -8.0)
+        self.assertEqual(recipe.second_cutter_velocity, -2.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
