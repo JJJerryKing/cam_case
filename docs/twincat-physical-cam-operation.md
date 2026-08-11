@@ -9,7 +9,12 @@
 - 每条模拟边长度：`3 mm`
 - 凸轮方式：相对凸轮，主轴与从轴均采用相对耦合
 
-传送带上电后的原始 NC 坐标必须可信。程序使用 `MC_MoveAbsolute` 移动到原始 NC `-0.6 mm`，随后只对传送带执行 `MC_SetPosition(0.0)`。此流程不是传感器寻零，无法修正不可信的原始 NC 坐标。
+传送带上电后的原始 NC 坐标必须可信。程序仍使用 `MC_MoveAbsolute`，但不会固定返回绝对 `-0.6 mm`：
+
+- 功能块冷启动后的首次标定，以 `-0.6 mm` 为机械零点相位，在 `-0.6 + k × 63.7 mm` 中选择离当前位置最近的目标；
+- 同一次 PLC 运行期间再次标定时，以已建立的 NC 零点相位为准，在 `0 + k × 63.7 mm` 中选择最近目标。
+
+因此每次标定的理论最大移动距离为半个周期 `31.85 mm`；恰好相差半周期时固定选择负方向。到达目标并确认设定位置、实际位置均在容差内后，程序只对传送带执行 `MC_SetPosition(0.0)`，并清除位置滞后量。此流程不是传感器寻零，无法发现或修正皮带打滑、工件相对皮带移动或不可信的原始 NC 坐标。
 
 Cutter 不执行位置重定义，只通过 `MC_MoveAbsolute` 移动到可信的绝对位置 `17 mm`。
 
@@ -18,8 +23,8 @@ Cutter 不执行位置重定义，只通过 `MC_MoveAbsolute` 移动到可信的
 1. 确认机械区域安全、两轴无故障且均已停止。
 2. 将 `GVL_CamControl.stCommands.bEnable` 置为 `TRUE`，等待状态进入 `CAM_STATE_IDLE`。
 3. 给 `bReference` 一个上升沿，程序自动依次执行：
-   - `CAM_STATE_POSITIONING_MASTER`：以 `5 mm/s` 将传送带绝对定位到原始 NC `-0.6 mm`；
-   - `CAM_STATE_REFERENCING_MASTER`：确认到位且停止后，将传送带当前位置定义为 `0 mm`；
+   - `CAM_STATE_POSITIONING_MASTER`：计算当前相位对应的最近周期目标，并以 `5 mm/s` 绝对定位；
+   - `CAM_STATE_REFERENCING_MASTER`：确认设定位置和实际位置都已到位且停止后，将传送带当前位置定义为 `0 mm`；
    - `CAM_STATE_POSITIONING_SLAVE`：将 Cutter 绝对定位到 `17 mm`；
    - 完成后返回 `CAM_STATE_IDLE`，并令 `bReferenced=TRUE`。
 4. 给 `bApplyRecipe` 一个上升沿，等待 `bRecipeLoaded=TRUE` 且状态进入 `CAM_STATE_READY`。
@@ -73,7 +78,7 @@ CAM_STATE_IDLE
 
 给 `bStop` 一个上升沿后，程序等待进入 `27–63.7 mm` 的零斜率驻留区，再受控停止传送带、解除凸轮耦合并把 Cutter 移回绝对 `17 mm`。
 
-受减速距离影响，传送带通常不会恰好停在下一周期的 `0 mm`。如果停止结束后状态为 `CAM_STATE_IDLE` 且 `bReferenced=FALSE`，确认两轴停止后再次给 `bReference` 上升沿。程序会自动返回可信的原始 NC `-0.6 mm` 并重新置零，无需手动移动传送带；随后重新执行 `bApplyRecipe` 和 `bStart`。
+受减速距离影响，传送带通常不会恰好停在下一周期的 `0 mm`。如果停止结束后状态为 `CAM_STATE_IDLE` 且 `bReferenced=FALSE`，确认两轴停止后再次给 `bReference` 上升沿。程序会选择最近的 `0 + k × 63.7 mm` 周期目标并重新置零，无需手动移动传送带；随后重新执行 `bApplyRecipe` 和 `bStart`。普通停机、故障与复位不会清除“本次运行已建立坐标零点”的内部标志；PLC 功能块重新初始化后，首次标定才恢复使用 `-0.6 mm` 原始相位。
 
 ## Scope 建议
 
@@ -94,4 +99,4 @@ CAM_STATE_IDLE
 
 发生故障时先记录 `eApplicationError`、`eErrorSource` 和 `udiMotionErrorID`。排除机械与 NC 故障并确认两轴停止后，给 `bReset` 一个上升沿。
 
-传送带自动定位或置零失败会报告 `CAM_ERROR_AXIS_REFERENCE` 和 `CAM_SOURCE_MASTER_AXIS`。复位不会重新定义 Cutter 的绝对位置；再次启动前仍须确认传送带原始 NC 坐标可信，并检查 Cutter 的 `17 mm` 待机位置。
+传送带自动定位、目标位置复核或置零后的零位复核失败，都会报告 `CAM_ERROR_AXIS_REFERENCE` 和 `CAM_SOURCE_MASTER_AXIS`。复位不会重新定义 Cutter 的绝对位置；再次启动前仍须确认传送带 NC 坐标和机械相位关系可信，并检查 Cutter 的 `17 mm` 待机位置。
