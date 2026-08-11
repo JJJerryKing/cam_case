@@ -842,7 +842,7 @@ IF fbElectronicCam.bCamActive AND (stActiveRecipe.lrObjectPitch > 0.0) THEN
     stScope.lrMasterPhase := lrMasterPhase;
     lrSlaveCamPosition := AxisCutter.NcToPlc.SetPos - lrSlaveCycleOrigin;
     stScope.lrObjectRelativePosition :=
-        lrSlaveCamPosition + stScope.lrMasterPhase;
+        -(lrSlaveCamPosition + stScope.lrMasterPhase);
 ELSE
     stScope.lrMasterPhase := 0.0;
     stScope.lrObjectRelativePosition := 0.0;
@@ -869,10 +869,10 @@ END_IF;
 CASE eProcessPhase OF
     CAM_PHASE_FIRST_EDGE:
         stScope.lrExpectedSlaveVelocity :=
-            -(stActiveRecipe.lrConveyorVelocity + stActiveRecipe.lrCutVelocity);
+            -(stActiveRecipe.lrConveyorVelocity - stActiveRecipe.lrCutVelocity);
     CAM_PHASE_SECOND_EDGE:
         stScope.lrExpectedSlaveVelocity :=
-            -(stActiveRecipe.lrConveyorVelocity - stActiveRecipe.lrCutVelocity);
+            -(stActiveRecipe.lrConveyorVelocity + stActiveRecipe.lrCutVelocity);
     CAM_PHASE_PREPARE,
     CAM_PHASE_INTER_EDGE_TRANSITION,
     CAM_PHASE_EXIT,

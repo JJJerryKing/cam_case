@@ -8,8 +8,8 @@ STRUCT
     lrCutVelocity : LREAL := 3.0;
     lrObjectEdgeLength : LREAL := 3.0;
     lrFirstEdgeStart : LREAL := 1.0;
-    lrInterEdgeTransitionDistance : LREAL := 5.0;
-    lrExitTransitionDistance : LREAL := 1.0;
+    lrInterEdgeTransitionDistance : LREAL := 4.0;
+    lrExitTransitionDistance : LREAL := 2.0;
     lrReturnStartPhase : LREAL := 17.0;
     lrReturnEndPhase : LREAL := 27.0;
     lrCutterReadyPosition : LREAL := 17.0;

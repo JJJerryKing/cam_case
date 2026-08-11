@@ -21,6 +21,8 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
             "lrConveyorVelocity : LREAL := 5.0",
             "lrCutVelocity : LREAL := 3.0",
             "lrObjectEdgeLength : LREAL := 3.0",
+            "lrInterEdgeTransitionDistance : LREAL := 4.0",
+            "lrExitTransitionDistance : LREAL := 2.0",
             "lrCutterReadyPosition : LREAL := 17.0",
             "lrMasterReferenceRawPosition : LREAL := -0.6",
             "lrReturnStartPhase : LREAL := 17.0",
@@ -45,8 +47,14 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
 
     def test_validator_uses_negative_slopes_and_direct_transition(self):
         text = source("POUs/Cam/FB_CamRecipeValidator.TcPOU")
-        self.assertIn("-(1.0 + stRecipe.lrCutVelocity", text)
-        self.assertIn("-(1.0 - stRecipe.lrCutVelocity", text)
+        first = text.index("stDerived.lrFirstSlope")
+        second = text.index("stDerived.lrSecondSlope")
+        self.assertIn(
+            "-(1.0 - stRecipe.lrCutVelocity", text[first:second]
+        )
+        self.assertIn(
+            "-(1.0 + stRecipe.lrCutVelocity", text[second:]
+        )
         self.assertIn("lrInterEdgeTransitionEnd", text)
         self.assertNotIn("lrClearanceRelative", text)
 
@@ -91,7 +99,24 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
         camming = text.index("CAM_STATE_CAMMING_IN:")
         starting = text.index("CAM_STATE_STARTING_MASTER:")
         self.assertLess(camming, starting)
-        self.assertIn("lrSlaveCamPosition + stScope.lrMasterPhase", text)
+        self.assertIn(
+            "-(lrSlaveCamPosition + stScope.lrMasterPhase)", text
+        )
+
+    def test_machine_reports_reversed_cut_velocities_and_physical_object_sign(self):
+        text = source("POUs/Cam/FB_CamMachine.TcPOU")
+        self.assertIn(
+            "-(stActiveRecipe.lrConveyorVelocity - stActiveRecipe.lrCutVelocity)",
+            text,
+        )
+        self.assertIn(
+            "-(stActiveRecipe.lrConveyorVelocity + stActiveRecipe.lrCutVelocity)",
+            text,
+        )
+        self.assertIn(
+            "-(lrSlaveCamPosition + stScope.lrMasterPhase)",
+            text,
+        )
 
     def test_cam_wrapper_stays_relative(self):
         text = source("POUs/Cam/FB_ElectronicCam.TcPOU")

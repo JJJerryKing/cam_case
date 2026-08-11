@@ -85,10 +85,10 @@ IF rtExecute.Q THEN
             stRecipe.lrObjectEdgeLength * stRecipe.lrConveyorVelocity
             / stRecipe.lrCutVelocity;
         stDerived.lrFirstSlope :=
-            -(1.0 + stRecipe.lrCutVelocity
+            -(1.0 - stRecipe.lrCutVelocity
               / stRecipe.lrConveyorVelocity);
         stDerived.lrSecondSlope :=
-            -(1.0 - stRecipe.lrCutVelocity
+            -(1.0 + stRecipe.lrCutVelocity
               / stRecipe.lrConveyorVelocity);
         stDerived.lrFirstEdgeEnd :=
             stRecipe.lrFirstEdgeStart + stDerived.lrCutMasterDistance;
