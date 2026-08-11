@@ -52,3 +52,23 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
         self.assertIn("stCamRef.NoOfRows := 8", text)
         self.assertIn("stDerived.lrExitEndY", text)
         self.assertNotIn("aPoints[9]", text)
+
+    def test_machine_references_only_master_and_positions_cutter_at_17(self):
+        text = source("POUs/Cam/FB_CamMachine.TcPOU")
+        self.assertIn("lrMasterReferenceRawPosition", text)
+        self.assertIn("lrCutterReadyPosition", text)
+        self.assertNotIn("fbSetPositionCutter", text)
+        self.assertIn("CAM_STATE_POSITIONING_SLAVE", text)
+
+    def test_machine_couples_before_starting_master(self):
+        text = source("POUs/Cam/FB_CamMachine.TcPOU")
+        camming = text.index("CAM_STATE_CAMMING_IN:")
+        starting = text.index("CAM_STATE_STARTING_MASTER:")
+        self.assertLess(camming, starting)
+        self.assertIn("lrSlaveCamPosition + stScope.lrMasterPhase", text)
+
+    def test_cam_wrapper_stays_relative(self):
+        text = source("POUs/Cam/FB_ElectronicCam.TcPOU")
+        self.assertIn("StartMode := MC_STARTMODE_RELATIVE", text)
+        self.assertIn("MasterAbsolute := FALSE", text)
+        self.assertIn("SlaveAbsolute := FALSE", text)
