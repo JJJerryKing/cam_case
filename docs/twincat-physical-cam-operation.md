@@ -4,27 +4,39 @@
 
 - 主轴：传送带，正方向运行，周期 `63.7 mm`
 - 从轴：Cutter，可信的 NC 绝对位置，待机位置 `17 mm`
-- 传送带速度：`5 mm/s`
+- 传送带生产及自动标定速度：`5 mm/s`
 - 切割相对速度：`3 mm/s`
 - 每条模拟边长度：`3 mm`
-- 凸轮方式：相对凸轮，主轴与从轴均使用相对耦合
+- 凸轮方式：相对凸轮，主轴与从轴均采用相对耦合
 
-程序只对传送带调用 `MC_SetPosition(0.0)`。Cutter 不执行位置重定义，而是通过绝对定位移动到 `17 mm`。
+传送带上电后的原始 NC 坐标必须可信。程序使用 `MC_MoveAbsolute` 移动到原始 NC `-0.6 mm`，随后只对传送带执行 `MC_SetPosition(0.0)`。此流程不是传感器寻零，无法修正不可信的原始 NC 坐标。
+
+Cutter 不执行位置重定义，只通过 `MC_MoveAbsolute` 移动到可信的绝对位置 `17 mm`。
 
 ## 每次上电后的启动顺序
 
-1. 确认机械安全、两轴无故障，并让两轴停止。
-2. 手动移动传送带，使物理基准标记对准；此时传送带 NC 实际位置应约为 `-0.6 mm`，允许误差由 `lrPositionTolerance` 决定，默认 `0.1 mm`。
-3. 将 `GVL_CamControl.stCommands.bEnable` 置为 `TRUE`，等待状态进入 `CAM_STATE_IDLE`。
-4. 给 `bReference` 一个上升沿。程序将：
-   - 在当前位置把传送带 NC 位置设为 `0 mm`；
-   - 把 Cutter 绝对定位到 `17 mm`；
-   - 完成后令 `bReferenced=TRUE`。
-5. 给 `bApplyRecipe` 一个上升沿，等待 `bRecipeLoaded=TRUE` 且状态进入 `CAM_STATE_READY`。
-6. 再次确认传送带为 `0 mm`、Cutter 为 `17 mm` 且两轴停止，然后给 `bStart` 一个上升沿。
-7. 程序先在静止状态耦合凸轮，耦合成功后才启动传送带；进入 `CAM_STATE_RUNNING` 后开始循环。
+1. 确认机械区域安全、两轴无故障且均已停止。
+2. 将 `GVL_CamControl.stCommands.bEnable` 置为 `TRUE`，等待状态进入 `CAM_STATE_IDLE`。
+3. 给 `bReference` 一个上升沿，程序自动依次执行：
+   - `CAM_STATE_POSITIONING_MASTER`：以 `5 mm/s` 将传送带绝对定位到原始 NC `-0.6 mm`；
+   - `CAM_STATE_REFERENCING_MASTER`：确认到位且停止后，将传送带当前位置定义为 `0 mm`；
+   - `CAM_STATE_POSITIONING_SLAVE`：将 Cutter 绝对定位到 `17 mm`；
+   - 完成后返回 `CAM_STATE_IDLE`，并令 `bReferenced=TRUE`。
+4. 给 `bApplyRecipe` 一个上升沿，等待 `bRecipeLoaded=TRUE` 且状态进入 `CAM_STATE_READY`。
+5. 确认传送带为 `0 mm`、Cutter 为 `17 mm` 且两轴停止，然后给 `bStart` 一个上升沿。
+6. 程序先在静止状态耦合凸轮，耦合成功后才启动传送带；进入 `CAM_STATE_RUNNING` 后开始循环。
 
-`bReference`、`bApplyRecipe`、`bStart`、`bStop` 和 `bReset` 都按上升沿处理，操作后应恢复为 `FALSE`。
+完整标定状态路径为：
+
+```text
+CAM_STATE_IDLE
+-> CAM_STATE_POSITIONING_MASTER
+-> CAM_STATE_REFERENCING_MASTER
+-> CAM_STATE_POSITIONING_SLAVE
+-> CAM_STATE_IDLE (bReferenced = TRUE)
+```
+
+`bReference`、`bApplyRecipe`、`bStart`、`bStop` 和 `bReset` 均按上升沿处理，操作后应恢复为 `FALSE`。
 
 ## 凸轮表
 
@@ -59,9 +71,9 @@ Cutter 相对凸轮位移 + 传送带主轴相位
 
 ## 正常停止与再次启动
 
-给 `bStop` 一个上升沿后，程序等待进入 `27–63.7 mm` 的零斜率驻留区，再按受控减速度停止、解耦并把 Cutter 移回绝对 `17 mm`。
+给 `bStop` 一个上升沿后，程序等待进入 `27–63.7 mm` 的零斜率驻留区，再受控停止传送带、解除凸轮耦合并把 Cutter 移回绝对 `17 mm`。
 
-受减速距离影响，传送带通常不会恰好停在下一周期的 `0 mm`。如果停止结束后状态为 `CAM_STATE_IDLE` 且 `bReferenced=FALSE`，再次运行前必须重新将物理基准移到 NC 约 `-0.6 mm`，然后重复 `bReference`、`bApplyRecipe` 和 `bStart`。不要在任意停点直接置零，否则凸轮周期会与传送带上的物体标记错位。
+受减速距离影响，传送带通常不会恰好停在下一周期的 `0 mm`。如果停止结束后状态为 `CAM_STATE_IDLE` 且 `bReferenced=FALSE`，确认两轴停止后再次给 `bReference` 上升沿。程序会自动返回可信的原始 NC `-0.6 mm` 并重新置零，无需手动移动传送带；随后重新执行 `bApplyRecipe` 和 `bStart`。
 
 ## Scope 建议
 
@@ -76,8 +88,10 @@ Cutter 相对凸轮位移 + 传送带主轴相位
 - `eMachineState`、`eProcessPhase`
 - `bCamActive`、`eApplicationError`、`udiMotionErrorID`
 
-首次低速实机测试时，应重点确认 Cutter 绝对位置始终高于机械下限、两个直线段的实际速度接近 `-8 mm/s` 和 `-2 mm/s`，以及回程区没有超出轴的速度、加速度和加加速度限制。
+首次实机测试时，应重点确认传送带能够安全移动到原始 NC `-0.6 mm`、Cutter 绝对位置始终高于机械下限、两个直线段实际速度接近 `-8 mm/s` 和 `-2 mm/s`，并确认回程没有超出轴的速度、加速度和加加速度限制。
 
 ## 故障处理
 
-发生故障时先记录 `eApplicationError`、`eErrorSource` 和 `udiMotionErrorID`。排除机械与 NC 故障并确认两轴停止后，给 `bReset` 一个上升沿。复位不会重新定义 Cutter 的绝对位置；重新启动前仍须检查传送带物理基准和 Cutter 的 `17 mm` 待机位置。
+发生故障时先记录 `eApplicationError`、`eErrorSource` 和 `udiMotionErrorID`。排除机械与 NC 故障并确认两轴停止后，给 `bReset` 一个上升沿。
+
+传送带自动定位或置零失败会报告 `CAM_ERROR_AXIS_REFERENCE` 和 `CAM_SOURCE_MASTER_AXIS`。复位不会重新定义 Cutter 的绝对位置；再次启动前仍须确认传送带原始 NC 坐标可信，并检查 Cutter 的 `17 mm` 待机位置。
