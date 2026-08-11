@@ -38,3 +38,17 @@ class PhysicalCamPlcStructureTests(unittest.TestCase):
         text = source("DUTs/E_CamMachineState.TcDUT")
         self.assertIn("CAM_STATE_POSITIONING_SLAVE", text)
         self.assertNotIn("CAM_STATE_REFERENCING_SLAVE", text)
+
+    def test_validator_uses_negative_slopes_and_direct_transition(self):
+        text = source("POUs/Cam/FB_CamRecipeValidator.TcPOU")
+        self.assertIn("-(1.0 + stRecipe.lrCutVelocity", text)
+        self.assertIn("-(1.0 - stRecipe.lrCutVelocity", text)
+        self.assertIn("lrInterEdgeTransitionEnd", text)
+        self.assertNotIn("lrClearanceRelative", text)
+
+    def test_builder_contains_approved_eight_rows(self):
+        text = source("POUs/Cam/FB_CamProfileBuilder.TcPOU")
+        self.assertIn("ARRAY[1..8] OF MC_MotionFunctionPoint", text)
+        self.assertIn("stCamRef.NoOfRows := 8", text)
+        self.assertIn("stDerived.lrExitEndY", text)
+        self.assertNotIn("aPoints[9]", text)

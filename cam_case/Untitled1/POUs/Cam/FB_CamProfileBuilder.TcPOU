@@ -9,7 +9,7 @@ VAR_INPUT
 END_VAR
 VAR_OUTPUT
     bDone : BOOL;
-    aPoints : ARRAY[1..10] OF MC_MotionFunctionPoint;
+    aPoints : ARRAY[1..8] OF MC_MotionFunctionPoint;
     stCamRef : MC_CAM_REF;
 END_VAR
 VAR
@@ -21,38 +21,33 @@ END_VAR
 bDone := FALSE;
 
 IF rtExecute.Q THEN
-    aPoints[1] := F_MakeCamPoint(1, MOTIONFUNCTYPE_POLYNOM1,
+    aPoints[1] := F_MakeCamPoint(1, MOTIONFUNCTYPE_POLYNOM5_MM,
         MOTIONPOINTTYPE_REST, 1, 0.0, 0.0, 0.0);
-    aPoints[2] := F_MakeCamPoint(2, MOTIONFUNCTYPE_POLYNOM5_MM,
-        MOTIONPOINTTYPE_REST, 1,
-        stRecipe.lrBlendMasterDistance, 0.0, 0.0);
-    aPoints[3] := F_MakeCamPoint(3, MOTIONFUNCTYPE_POLYNOM1,
+    aPoints[2] := F_MakeCamPoint(2, MOTIONFUNCTYPE_POLYNOM1,
         MOTIONPOINTTYPE_VELOCITY, 1, stRecipe.lrFirstEdgeStart,
         stDerived.lrFirstStartY, stDerived.lrFirstSlope);
-    aPoints[4] := F_MakeCamPoint(4, MOTIONFUNCTYPE_POLYNOM5_MM,
+    aPoints[3] := F_MakeCamPoint(3, MOTIONFUNCTYPE_POLYNOM5_MM,
         MOTIONPOINTTYPE_VELOCITY, 1, stDerived.lrFirstEdgeEnd,
         stDerived.lrFirstEndY, stDerived.lrFirstSlope);
-    aPoints[5] := F_MakeCamPoint(5, MOTIONFUNCTYPE_POLYNOM1,
-        MOTIONPOINTTYPE_VELOCITY, 1, stDerived.lrExitBlendEnd,
-        stDerived.lrExitEndY, 1.0);
-    aPoints[6] := F_MakeCamPoint(6, MOTIONFUNCTYPE_POLYNOM5_MM,
-        MOTIONPOINTTYPE_VELOCITY, 1, stDerived.lrEntryBlendStart,
-        stDerived.lrEntryStartY, 1.0);
-    aPoints[7] := F_MakeCamPoint(7, MOTIONFUNCTYPE_POLYNOM1,
-        MOTIONPOINTTYPE_VELOCITY, 1, stRecipe.lrSecondEdgeStart,
-        stDerived.lrSecondStartY, stDerived.lrSecondSlope);
-    aPoints[8] := F_MakeCamPoint(8, MOTIONFUNCTYPE_POLYNOM5_MM,
+    aPoints[4] := F_MakeCamPoint(4, MOTIONFUNCTYPE_POLYNOM1,
+        MOTIONPOINTTYPE_VELOCITY, 1,
+        stDerived.lrInterEdgeTransitionEnd,
+        stDerived.lrTransitionEndY, stDerived.lrSecondSlope);
+    aPoints[5] := F_MakeCamPoint(5, MOTIONFUNCTYPE_POLYNOM5_MM,
         MOTIONPOINTTYPE_VELOCITY, 1, stDerived.lrSecondEdgeEnd,
         stDerived.lrSecondEndY, stDerived.lrSecondSlope);
-    aPoints[9] := F_MakeCamPoint(9, MOTIONFUNCTYPE_POLYNOM1,
+    aPoints[6] := F_MakeCamPoint(6, MOTIONFUNCTYPE_POLYNOM5_MM,
+        MOTIONPOINTTYPE_REST, 1, stDerived.lrExitEnd,
+        stDerived.lrExitEndY, 0.0);
+    aPoints[7] := F_MakeCamPoint(7, MOTIONFUNCTYPE_POLYNOM1,
         MOTIONPOINTTYPE_REST, 1, stRecipe.lrReturnEndPhase, 0.0, 0.0);
-    aPoints[10] := F_MakeCamPoint(10, MOTIONFUNCTYPE_NOTDEF,
+    aPoints[8] := F_MakeCamPoint(8, MOTIONFUNCTYPE_NOTDEF,
         MOTIONPOINTTYPE_REST, 0, stRecipe.lrObjectPitch, 0.0, 0.0);
 
     stCamRef.pArray := ADR(aPoints);
     stCamRef.ArraySize := SIZEOF(aPoints);
     stCamRef.TableType := MC_TABLETYPE_MOTIONFUNCTION;
-    stCamRef.NoOfRows := 10;
+    stCamRef.NoOfRows := 8;
     stCamRef.NoOfColumns := 1;
     bDone := TRUE;
 END_IF;

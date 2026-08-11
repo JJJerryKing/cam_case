@@ -42,14 +42,20 @@ IF rtExecute.Q THEN
         eError := CAM_ERROR_RECIPE_CUT_VELOCITY;
     ELSIF NOT ((stRecipe.lrObjectEdgeLength > 0.0)
        AND (stRecipe.lrObjectEdgeLength < c_lrSaneUpperBound)
-       AND (stRecipe.lrBlendMasterDistance > 0.0)
-       AND (stRecipe.lrBlendMasterDistance < c_lrSaneUpperBound)
+       AND (stRecipe.lrInterEdgeTransitionDistance > 0.0)
+       AND (stRecipe.lrInterEdgeTransitionDistance < c_lrSaneUpperBound)
+       AND (stRecipe.lrExitTransitionDistance > 0.0)
+       AND (stRecipe.lrExitTransitionDistance < c_lrSaneUpperBound)
        AND (stRecipe.lrFirstEdgeStart > 0.0)
        AND (stRecipe.lrFirstEdgeStart < c_lrSaneUpperBound)
-       AND (stRecipe.lrSecondEdgeStart > 0.0)
-       AND (stRecipe.lrSecondEdgeStart < c_lrSaneUpperBound)
+       AND (stRecipe.lrReturnStartPhase > 0.0)
+       AND (stRecipe.lrReturnStartPhase < c_lrSaneUpperBound)
        AND (stRecipe.lrReturnEndPhase > 0.0)
-       AND (stRecipe.lrReturnEndPhase < c_lrSaneUpperBound)) THEN
+       AND (stRecipe.lrReturnEndPhase < c_lrSaneUpperBound)
+       AND (stRecipe.lrCutterReadyPosition > 0.0)
+       AND (stRecipe.lrCutterReadyPosition < c_lrSaneUpperBound)
+       AND (stRecipe.lrMasterReferenceRawPosition > -c_lrSaneUpperBound)
+       AND (stRecipe.lrMasterReferenceRawPosition < c_lrSaneUpperBound)) THEN
         eError := CAM_ERROR_RECIPE_EDGE_LENGTH;
     ELSIF NOT ((stRecipe.lrMasterAcceleration > 0.0)
        AND (stRecipe.lrMasterAcceleration < c_lrSaneUpperBound)
@@ -79,31 +85,33 @@ IF rtExecute.Q THEN
             stRecipe.lrObjectEdgeLength * stRecipe.lrConveyorVelocity
             / stRecipe.lrCutVelocity;
         stDerived.lrFirstSlope :=
-            1.0 + stRecipe.lrCutVelocity / stRecipe.lrConveyorVelocity;
+            -(1.0 + stRecipe.lrCutVelocity
+              / stRecipe.lrConveyorVelocity);
         stDerived.lrSecondSlope :=
-            1.0 - stRecipe.lrCutVelocity / stRecipe.lrConveyorVelocity;
+            -(1.0 - stRecipe.lrCutVelocity
+              / stRecipe.lrConveyorVelocity);
         stDerived.lrFirstEdgeEnd :=
             stRecipe.lrFirstEdgeStart + stDerived.lrCutMasterDistance;
-        stDerived.lrExitBlendEnd :=
-            stDerived.lrFirstEdgeEnd + stRecipe.lrBlendMasterDistance;
-        stDerived.lrEntryBlendStart :=
-            stRecipe.lrSecondEdgeStart - stRecipe.lrBlendMasterDistance;
+        stDerived.lrInterEdgeTransitionEnd :=
+            stDerived.lrFirstEdgeEnd
+            + stRecipe.lrInterEdgeTransitionDistance;
         stDerived.lrSecondEdgeEnd :=
-            stRecipe.lrSecondEdgeStart + stDerived.lrCutMasterDistance;
-        stDerived.lrFirstStartY := stRecipe.lrFirstEdgeStart;
+            stDerived.lrInterEdgeTransitionEnd
+            + stDerived.lrCutMasterDistance;
+        stDerived.lrExitEnd :=
+            stDerived.lrSecondEdgeEnd
+            + stRecipe.lrExitTransitionDistance;
+        stDerived.lrFirstStartY := -stRecipe.lrFirstEdgeStart;
         stDerived.lrFirstEndY := stDerived.lrFirstStartY
             + stDerived.lrFirstSlope * stDerived.lrCutMasterDistance;
-        stDerived.lrExitEndY := stDerived.lrFirstEndY
-            + 0.5 * (stDerived.lrFirstSlope + 1.0)
-            * stRecipe.lrBlendMasterDistance;
-        stDerived.lrClearanceRelative :=
-            stDerived.lrExitEndY - stDerived.lrExitBlendEnd;
-        stDerived.lrEntryStartY :=
-            stDerived.lrEntryBlendStart + stDerived.lrClearanceRelative;
-        stDerived.lrSecondStartY :=
-            stRecipe.lrSecondEdgeStart + stRecipe.lrObjectEdgeLength;
-        stDerived.lrSecondEndY := stDerived.lrSecondStartY
+        stDerived.lrTransitionEndY := stDerived.lrFirstEndY
+            + 0.5 * (stDerived.lrFirstSlope + stDerived.lrSecondSlope)
+              * stRecipe.lrInterEdgeTransitionDistance;
+        stDerived.lrSecondEndY := stDerived.lrTransitionEndY
             + stDerived.lrSecondSlope * stDerived.lrCutMasterDistance;
+        stDerived.lrExitEndY := stDerived.lrSecondEndY
+            + 0.5 * stDerived.lrSecondSlope
+              * stRecipe.lrExitTransitionDistance;
 
         // Symmetric jerk-limited stop distance from steady conveyor speed.
         IF stRecipe.lrConveyorVelocity >=
@@ -121,11 +129,20 @@ IF rtExecute.Q THEN
         stDerived.lrStopWindowMargin :=
             2.0 * c_lrPlcCycleSeconds * stRecipe.lrConveyorVelocity;
 
-        IF stRecipe.lrFirstEdgeStart <= stRecipe.lrBlendMasterDistance THEN
+        IF NOT (stRecipe.lrFirstEdgeStart < stDerived.lrFirstEdgeEnd) THEN
             eError := CAM_ERROR_RECIPE_PHASE_ORDER;
-        ELSIF stDerived.lrExitBlendEnd >= stDerived.lrEntryBlendStart THEN
-            eError := CAM_ERROR_RECIPE_SYNC_SPACE;
-        ELSIF (stDerived.lrSecondEdgeEnd >= stRecipe.lrReturnEndPhase)
+        ELSIF NOT (stDerived.lrFirstEdgeEnd
+                   < stDerived.lrInterEdgeTransitionEnd)
+           OR NOT (stDerived.lrInterEdgeTransitionEnd
+                   < stDerived.lrSecondEdgeEnd) THEN
+            eError := CAM_ERROR_RECIPE_PHASE_ORDER;
+        ELSIF (stDerived.lrSecondEdgeEnd >= stRecipe.lrReturnStartPhase)
+           OR (ABS(stDerived.lrExitEnd - stRecipe.lrReturnStartPhase)
+               > stRecipe.lrPositionTolerance)
+           OR ((stRecipe.lrCutterReadyPosition + stDerived.lrExitEndY)
+               <= 0.0) THEN
+            eError := CAM_ERROR_RECIPE_RETURN_SPACE;
+        ELSIF (stRecipe.lrReturnStartPhase >= stRecipe.lrReturnEndPhase)
            OR (stRecipe.lrReturnEndPhase >= stRecipe.lrObjectPitch) THEN
             eError := CAM_ERROR_RECIPE_RETURN_SPACE;
         ELSIF (stDerived.lrMasterStopDistance
