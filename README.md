@@ -200,4 +200,4 @@ bReference → bApplyRecipe → bStart
 | `bRunning` | 设备处于连续运行状态 |
 | `bBusy` | 自动流程正在执行 |
 
-更多操作信息请参阅[详细操作文档](docs/twincat-physical-cam-operation.md)。
+更多操作信息请参阅[详细操作文档]（位于）。
